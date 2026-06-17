@@ -107,6 +107,27 @@ T: Dict[str, Dict[str, str]] = {
         "no": "😔 Katalogen er tom. Sjekk tilbake senere!",
         "sv": "😔 Katalogen är tom. Kom tillbaka senare!",
     },
+    "select_category": {
+        "ru": "🛍 Выберите категорию:",
+        "uk": "🛍 Оберіть категорію:",
+        "en": "🛍 Choose a category:",
+        "no": "🛍 Velg en kategori:",
+        "sv": "🛍 Välj en kategori:",
+    },
+    "all_products": {
+        "ru": "📋 Все товары",
+        "uk": "📋 Усі товари",
+        "en": "📋 All products",
+        "no": "📋 Alle produkter",
+        "sv": "📋 Alla produkter",
+    },
+    "back_to_categories": {
+        "ru": "⬅️ К категориям",
+        "uk": "⬅️ До категорій",
+        "en": "⬅️ Back to categories",
+        "no": "⬅️ Tilbake til kategorier",
+        "sv": "⬅️ Tillbaka till kategorier",
+    },
     "select_size": {
         "ru": "📐 Выберите размер:",
         "uk": "📐 Оберіть розмір:",
@@ -136,11 +157,11 @@ T: Dict[str, Dict[str, str]] = {
         "sv": "🛒 Varukorgen är tom.",
     },
     "cart_total": {
-        "ru": "💰 Итого: {total} ₽",
-        "uk": "💰 Разом: {total} ₽",
-        "en": "💰 Total: {total} ₽",
-        "no": "💰 Totalt: {total} ₽",
-        "sv": "💰 Totalt: {total} ₽",
+        "ru": "💰 Итого: {total} €",
+        "uk": "💰 Разом: {total} €",
+        "en": "💰 Total: {total} €",
+        "no": "💰 Totalt: {total} €",
+        "sv": "💰 Totalt: {total} €",
     },
     "checkout": {
         "ru": "✅ Оформить заказ",
@@ -213,11 +234,11 @@ T: Dict[str, Dict[str, str]] = {
         "sv": "❌ Ogiltig eller inaktiv kampanjkod.",
     },
     "order_confirm": {
-        "ru": "📋 Подтверждение заказа:\n\n{items}\n\n👤 Имя: {name}\n📱 Телефон: {phone}\n📍 Адрес: {address}\n{promo_line}\n💰 Итого: {total} ₽\n\nПодтвердить заказ?",
-        "uk": "📋 Підтвердження замовлення:\n\n{items}\n\n👤 Ім'я: {name}\n📱 Телефон: {phone}\n📍 Адреса: {address}\n{promo_line}\n💰 Разом: {total} ₽\n\nПідтвердити замовлення?",
-        "en": "📋 Order Confirmation:\n\n{items}\n\n👤 Name: {name}\n📱 Phone: {phone}\n📍 Address: {address}\n{promo_line}\n💰 Total: {total} ₽\n\nConfirm order?",
-        "no": "📋 Ordrebekreftelse:\n\n{items}\n\n👤 Navn: {name}\n📱 Telefon: {phone}\n📍 Adresse: {address}\n{promo_line}\n💰 Totalt: {total} ₽\n\nBekreft bestilling?",
-        "sv": "📋 Orderbekräftelse:\n\n{items}\n\n👤 Namn: {name}\n📱 Telefon: {phone}\n📍 Adress: {address}\n{promo_line}\n💰 Totalt: {total} ₽\n\nBekräfta beställning?",
+        "ru": "📋 Подтверждение заказа:\n\n{items}\n\n👤 Имя: {name}\n📱 Телефон: {phone}\n📍 Адрес: {address}\n{promo_line}\n💰 Итого: {total} €\n\nПодтвердить заказ?",
+        "uk": "📋 Підтвердження замовлення:\n\n{items}\n\n👤 Ім'я: {name}\n📱 Телефон: {phone}\n📍 Адреса: {address}\n{promo_line}\n💰 Разом: {total} €\n\nПідтвердити замовлення?",
+        "en": "📋 Order Confirmation:\n\n{items}\n\n👤 Name: {name}\n📱 Phone: {phone}\n📍 Address: {address}\n{promo_line}\n💰 Total: {total} €\n\nConfirm order?",
+        "no": "📋 Ordrebekreftelse:\n\n{items}\n\n👤 Navn: {name}\n📱 Telefon: {phone}\n📍 Adresse: {address}\n{promo_line}\n💰 Totalt: {total} €\n\nBekreft bestilling?",
+        "sv": "📋 Orderbekräftelse:\n\n{items}\n\n👤 Namn: {name}\n📱 Telefon: {phone}\n📍 Adress: {address}\n{promo_line}\n💰 Totalt: {total} €\n\nBekräfta beställning?",
     },
     "confirm": {
         "ru": "✅ Подтвердить",
@@ -353,11 +374,11 @@ T: Dict[str, Dict[str, str]] = {
         "sv": "🎟 Kampanj: {code} (-{discount})",
     },
     "old_price": {
-        "ru": "~~{old_price} ₽~~",
-        "uk": "~~{old_price} ₽~~",
-        "en": "~~{old_price} ₽~~",
-        "no": "~~{old_price} ₽~~",
-        "sv": "~~{old_price} ₽~~",
+        "ru": "~~{old_price} €~~",
+        "uk": "~~{old_price} €~~",
+        "en": "~~{old_price} €~~",
+        "no": "~~{old_price} €~~",
+        "sv": "~~{old_price} €~~",
     },
     "page": {
         "ru": "Стр. {page}/{total}",
@@ -426,6 +447,7 @@ def init_db():
         photos TEXT DEFAULT '[]',
         sizes TEXT DEFAULT '[]',
         colors TEXT DEFAULT '[]',
+        category TEXT DEFAULT 'Разное',
         is_active INTEGER DEFAULT 1,
         created_at TEXT DEFAULT (datetime('now'))
     );
@@ -479,7 +501,20 @@ def init_db():
     );
     """)
 
-    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('payment_link', 'https://www.tinkoff.ru/rm/r_UJBvvZLldj.sElFsijULP/egIp160996')")
+    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('payment_link', 'https://www.tinkoff.ru/rm/r_HbPZNUiqBU.jnNWRPlZwL/vygOe35729')")
+
+    # Если в БД осталась старая заглушка из предыдущей версии кода — обновляем на актуальную ссылку
+    c.execute("""
+        UPDATE settings SET value='https://www.tinkoff.ru/rm/r_HbPZNUiqBU.jnNWRPlZwL/vygOe35729'
+        WHERE key='payment_link' AND value='https://payment.example.com'
+    """)
+
+    # Миграция: добавляем колонку category, если её ещё нет (для уже существующих БД)
+    existing_cols = [row[1] for row in c.execute("PRAGMA table_info(products)").fetchall()]
+    if "category" not in existing_cols:
+        c.execute("ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'Разное'")
+        c.execute("UPDATE products SET category='Разное' WHERE category IS NULL OR category=''")
+
     conn.commit()
     conn.close()
 
@@ -519,14 +554,32 @@ def db_get_lang(tg_id: int) -> str:
     return user["lang"] if user else "en"
 
 
-def db_get_active_products(page: int = 0, per_page: int = 5):
+def db_get_categories() -> List[str]:
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT DISTINCT category FROM products WHERE is_active=1 AND category IS NOT NULL AND category != '' ORDER BY category"
+    ).fetchall()
+    conn.close()
+    return [r["category"] for r in rows]
+
+
+def db_get_active_products(page: int = 0, per_page: int = 5, category: Optional[str] = None):
     conn = get_db()
     offset = page * per_page
-    rows = conn.execute(
-        "SELECT * FROM products WHERE is_active=1 ORDER BY id DESC LIMIT ? OFFSET ?",
-        (per_page, offset)
-    ).fetchall()
-    total = conn.execute("SELECT COUNT(*) FROM products WHERE is_active=1").fetchone()[0]
+    if category:
+        rows = conn.execute(
+            "SELECT * FROM products WHERE is_active=1 AND category=? ORDER BY id DESC LIMIT ? OFFSET ?",
+            (category, per_page, offset)
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) FROM products WHERE is_active=1 AND category=?", (category,)
+        ).fetchone()[0]
+    else:
+        rows = conn.execute(
+            "SELECT * FROM products WHERE is_active=1 ORDER BY id DESC LIMIT ? OFFSET ?",
+            (per_page, offset)
+        ).fetchall()
+        total = conn.execute("SELECT COUNT(*) FROM products WHERE is_active=1").fetchone()[0]
     conn.close()
     return rows, total
 
@@ -712,11 +765,25 @@ def db_get_all_orders():
     return rows
 
 
-def db_get_all_products():
+def db_get_all_products(category: Optional[str] = None):
     conn = get_db()
-    rows = conn.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
+    if category:
+        rows = conn.execute(
+            "SELECT * FROM products WHERE category=? ORDER BY id DESC", (category,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
     conn.close()
     return rows
+
+
+def db_get_all_categories() -> List[str]:
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != '' ORDER BY category"
+    ).fetchall()
+    conn.close()
+    return [r["category"] for r in rows]
 
 
 def db_get_all_promos():
@@ -726,13 +793,13 @@ def db_get_all_promos():
     return rows
 
 
-def db_add_product(name, description, price, old_price, photos, sizes, colors):
+def db_add_product(name, description, price, old_price, photos, sizes, colors, category="Разное"):
     conn = get_db()
     cur = conn.execute("""
-        INSERT INTO products (name, description, price, old_price, photos, sizes, colors)
-        VALUES (?,?,?,?,?,?,?)
+        INSERT INTO products (name, description, price, old_price, photos, sizes, colors, category)
+        VALUES (?,?,?,?,?,?,?,?)
     """, (name, description, price, old_price,
-          json.dumps(photos), json.dumps(sizes), json.dumps(colors)))
+          json.dumps(photos), json.dumps(sizes), json.dumps(colors), category))
     product_id = cur.lastrowid
     conn.commit()
     conn.close()
@@ -740,7 +807,7 @@ def db_add_product(name, description, price, old_price, photos, sizes, colors):
 
 
 def db_update_product_field(product_id: int, field: str, value):
-    allowed = {"name", "description", "price", "old_price", "photos", "sizes", "colors", "is_active"}
+    allowed = {"name", "description", "price", "old_price", "photos", "sizes", "colors", "category", "is_active"}
     if field not in allowed:
         return
     conn = get_db()
@@ -822,6 +889,7 @@ class CheckoutState(StatesGroup):
 class AdminAddProduct(StatesGroup):
     name = State()
     description = State()
+    category = State()
     price = State()
     old_price = State()
     photos = State()
@@ -874,22 +942,30 @@ def kb_main_menu(lang: str) -> ReplyKeyboardMarkup:
     )
 
 
+def kb_categories(categories: List[str], lang: str) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text=t("all_products", lang), callback_data="cat_select:all")]]
+    for i, cat in enumerate(categories):
+        rows.append([InlineKeyboardButton(text=cat, callback_data=f"cat_select:{i}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def kb_catalog_item(product_id: int, lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=t("add_to_cart", lang), callback_data=f"buy:{product_id}")]
     ])
 
 
-def kb_catalog_nav(page: int, total_pages: int, lang: str) -> InlineKeyboardMarkup:
+def kb_catalog_nav(page: int, total_pages: int, lang: str, cat_token: str) -> InlineKeyboardMarkup:
     row = []
     if page > 0:
-        row.append(InlineKeyboardButton(text=t("prev", lang), callback_data=f"cat_page:{page-1}"))
+        row.append(InlineKeyboardButton(text=t("prev", lang), callback_data=f"cat_page:{cat_token}:{page-1}"))
     row.append(InlineKeyboardButton(
         text=t("page", lang, page=page+1, total=total_pages), callback_data="noop"
     ))
     if page < total_pages - 1:
-        row.append(InlineKeyboardButton(text=t("next", lang), callback_data=f"cat_page:{page+1}"))
-    return InlineKeyboardMarkup(inline_keyboard=[row])
+        row.append(InlineKeyboardButton(text=t("next", lang), callback_data=f"cat_page:{cat_token}:{page+1}"))
+    back_row = [InlineKeyboardButton(text=t("back_to_categories", lang), callback_data="cat_back")]
+    return InlineKeyboardMarkup(inline_keyboard=[row, back_row] if row else [back_row])
 
 
 def kb_sizes(sizes: list, product_id: int) -> InlineKeyboardMarkup:
@@ -986,12 +1062,19 @@ def kb_admin_main() -> ReplyKeyboardMarkup:
 
 def kb_admin_products(products) -> InlineKeyboardMarkup:
     rows = []
+    grouped: Dict[str, list] = {}
     for p in products:
-        status = "✅" if p["is_active"] else "❌"
-        rows.append([InlineKeyboardButton(
-            text=f"{status} {p['name']} — {p['price']}₽",
-            callback_data=f"adm_prod:{p['id']}"
-        )])
+        cat = p["category"] or "Разное"
+        grouped.setdefault(cat, []).append(p)
+
+    for cat in sorted(grouped.keys()):
+        rows.append([InlineKeyboardButton(text=f"— {cat} —", callback_data="noop")])
+        for p in grouped[cat]:
+            status = "✅" if p["is_active"] else "❌"
+            rows.append([InlineKeyboardButton(
+                text=f"{status} {p['name']} — {p['price']}€",
+                callback_data=f"adm_prod:{p['id']}"
+            )])
     rows.append([InlineKeyboardButton(text="➕ Добавить товар", callback_data="adm_add_product")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1010,6 +1093,7 @@ def kb_admin_product_actions(product_id: int, is_active: int) -> InlineKeyboardM
 def kb_admin_edit_fields(product_id: int) -> InlineKeyboardMarkup:
     fields = [
         ("Название", "name"), ("Описание", "description"),
+        ("Категория", "category"),
         ("Цена", "price"), ("Старая цена", "old_price"),
         ("Размеры", "sizes"), ("Цвета", "colors"),
         ("Фото", "photos"),
@@ -1024,7 +1108,7 @@ def kb_admin_promos(promos) -> InlineKeyboardMarkup:
     rows = []
     for p in promos:
         status = "✅" if p["is_active"] else "❌"
-        disc = f"{p['value']}%" if p["type"] == "percent" else f"{p['value']}₽"
+        disc = f"{p['value']}%" if p["type"] == "percent" else f"{p['value']}€"
         rows.append([
             InlineKeyboardButton(
                 text=f"{status} {p['code']} -{disc}",
@@ -1052,7 +1136,7 @@ def kb_admin_orders(orders) -> InlineKeyboardMarkup:
     for o in orders[:20]:
         icon = status_map.get(o["status"], "❓")
         rows.append([InlineKeyboardButton(
-            text=f"{icon} #{o['id']} {o['name']} — {o['total']}₽",
+            text=f"{icon} #{o['id']} {o['name']} — {o['total']}€",
             callback_data=f"adm_order:{o['id']}"
         )])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -1083,7 +1167,7 @@ def format_items_for_order(cart_items) -> list:
 def format_order_items_text(items: list) -> str:
     lines = []
     for i in items:
-        lines.append(f"• {i['name']} | {i['size']} | {i['color']} x{i['quantity']} — {i['price'] * i['quantity']:.2f}₽")
+        lines.append(f"• {i['name']} | {i['size']} | {i['color']} x{i['quantity']} — {i['price'] * i['quantity']:.2f}€")
     return "\n".join(lines)
 
 
@@ -1093,7 +1177,7 @@ def apply_discount(total: float, promo: sqlite3.Row) -> tuple:
         discount_str = f"{promo['value']}%"
     else:
         discount = min(promo["value"], total)
-        discount_str = f"{promo['value']}₽"
+        discount_str = f"{promo['value']}€"
     return discount, discount_str
 
 
@@ -1168,11 +1252,45 @@ async def cb_lang_chosen(call: CallbackQuery, state: FSMContext):
 async def handle_catalog(message: Message, state: FSMContext):
     await state.clear()
     lang = db_get_lang(message.from_user.id)
-    await show_catalog_page(message, lang, 0)
+    await show_categories(message, state, lang)
 
 
-async def show_catalog_page(message: Message, lang: str, page: int):
-    products, total = db_get_active_products(page=page, per_page=5)
+async def show_categories(message: Message, state: FSMContext, lang: str):
+    categories = db_get_categories()
+    if not categories:
+        await message.answer(t("catalog_empty", lang))
+        return
+    await state.update_data(categories=categories)
+    await message.answer(
+        t("select_category", lang),
+        reply_markup=kb_categories(categories, lang)
+    )
+
+
+def resolve_category(cat_token: str, categories: List[str]) -> Optional[str]:
+    if cat_token == "all":
+        return None
+    try:
+        idx = int(cat_token)
+        return categories[idx]
+    except (ValueError, IndexError):
+        return None
+
+
+@router.callback_query(F.data.startswith("cat_select:"))
+async def cb_category_selected(call: CallbackQuery, state: FSMContext):
+    cat_token = call.data.split(":", 1)[1]
+    lang = db_get_lang(call.from_user.id)
+    data = await state.get_data()
+    categories = data.get("categories") or db_get_categories()
+    category = resolve_category(cat_token, categories)
+    await call.message.delete()
+    await show_catalog_page(call.message, state, lang, 0, cat_token, category)
+    await call.answer()
+
+
+async def show_catalog_page(message: Message, state: FSMContext, lang: str, page: int, cat_token: str, category: Optional[str]):
+    products, total = db_get_active_products(page=page, per_page=5, category=category)
     if not products:
         await message.answer(t("catalog_empty", lang))
         return
@@ -1186,13 +1304,13 @@ async def show_catalog_page(message: Message, lang: str, page: int):
 
         old_price_text = ""
         if product["old_price"]:
-            old_price_text = f"\n<s>{product['old_price']} ₽</s>"
+            old_price_text = f"\n<s>{product['old_price']} €</s>"
 
         caption = (
             f"<b>{product['name']}</b>\n"
             f"{product['description'] or ''}\n"
             f"{old_price_text}"
-            f"\n<b>{product['price']} ₽</b>\n"
+            f"\n<b>{product['price']} €</b>\n"
             f"📐 {', '.join(sizes)}\n"
             f"🎨 {', '.join(colors)}"
         )
@@ -1214,19 +1332,30 @@ async def show_catalog_page(message: Message, lang: str, page: int):
         else:
             await message.answer(caption, reply_markup=kb)
 
-    if total_pages > 1:
-        await message.answer(
-            t("page", lang, page=page+1, total=total_pages),
-            reply_markup=kb_catalog_nav(page, total_pages, lang)
-        )
+    await message.answer(
+        t("page", lang, page=page+1, total=total_pages) if total_pages > 1 else t("back_to_categories", lang),
+        reply_markup=kb_catalog_nav(page, total_pages, lang, cat_token)
+    )
 
 
 @router.callback_query(F.data.startswith("cat_page:"))
-async def cb_catalog_page(call: CallbackQuery):
-    page = int(call.data.split(":")[1])
+async def cb_catalog_page(call: CallbackQuery, state: FSMContext):
+    _, cat_token, page_str = call.data.split(":")
+    page = int(page_str)
+    lang = db_get_lang(call.from_user.id)
+    data = await state.get_data()
+    categories = data.get("categories") or db_get_categories()
+    category = resolve_category(cat_token, categories)
+    await call.message.delete()
+    await show_catalog_page(call.message, state, lang, page, cat_token, category)
+    await call.answer()
+
+
+@router.callback_query(F.data == "cat_back")
+async def cb_catalog_back(call: CallbackQuery, state: FSMContext):
     lang = db_get_lang(call.from_user.id)
     await call.message.delete()
-    await show_catalog_page(call.message, lang, page)
+    await show_categories(call.message, state, lang)
     await call.answer()
 
 
@@ -1504,7 +1633,7 @@ async def cb_order_confirm(call: CallbackQuery, state: FSMContext):
     db_clear_cart(tg_id)
     await state.clear()
 
-    payment_link = db_get_setting("payment_link") or "https://payment.example.com"
+    payment_link = db_get_setting("payment_link") or "https://www.tinkoff.ru/rm/r_HbPZNUiqBU.jnNWRPlZwL/vygOe35729"
 
     await call.message.answer(
         t("order_placed", lang, order_id=order_id),
@@ -1558,7 +1687,7 @@ async def cb_paid(call: CallbackQuery):
     username = f"@{user['username']}" if user and user["username"] else "—"
 
     items_text = format_order_items_text(items)
-    promo_info = f"\n🎟 Промокод: {order['promo_code']} (-{order['discount_amount']}₽)" if order["promo_code"] else ""
+    promo_info = f"\n🎟 Промокод: {order['promo_code']} (-{order['discount_amount']}€)" if order["promo_code"] else ""
 
     admin_text = (
         f"🛒 <b>Новый оплаченный заказ #{order_id}</b>\n\n"
@@ -1569,7 +1698,7 @@ async def cb_paid(call: CallbackQuery):
         f"📍 Адрес: {order['address']}\n\n"
         f"🛍 Товары:\n{items_text}"
         f"{promo_info}\n\n"
-        f"💰 Итого: {order['total']:.2f}₽"
+        f"💰 Итого: {order['total']:.2f}€"
     )
 
     for admin_id in ADMIN_IDS:
@@ -1666,7 +1795,7 @@ async def handle_my_orders(message: Message, state: FSMContext):
             f"📦 <b>Заказ #{o['id']}</b>\n"
             f"{status}\n"
             f"{items_short}\n"
-            f"💰 {o['total']:.2f}₽\n"
+            f"💰 {o['total']:.2f}€\n"
             f"📅 {o['created_at'][:10]}\n\n"
         )
 
@@ -1758,8 +1887,9 @@ async def cb_adm_product(call: CallbackQuery):
     text = (
         f"<b>{product['name']}</b>\n"
         f"{product['description'] or ''}\n\n"
-        f"💰 Цена: {product['price']} ₽"
-        + (f" | Старая: {product['old_price']} ₽" if product["old_price"] else "") + "\n"
+        f"🏷 Категория: {product['category'] or 'Разное'}\n"
+        f"💰 Цена: {product['price']} €"
+        + (f" | Старая: {product['old_price']} €" if product["old_price"] else "") + "\n"
         f"📐 Размеры: {', '.join(sizes)}\n"
         f"🎨 Цвета: {', '.join(colors)}\n"
         f"🖼 Фото: {len(photos)}\n"
@@ -1816,6 +1946,42 @@ async def adm_product_name(message: Message, state: FSMContext):
 @router.message(AdminAddProduct.description)
 async def adm_product_description(message: Message, state: FSMContext):
     await state.update_data(description=message.text.strip())
+    await state.set_state(AdminAddProduct.category)
+    categories = db_get_all_categories()
+    rows = [[InlineKeyboardButton(text=c, callback_data=f"adm_cat_pick:{i}")] for i, c in enumerate(categories)]
+    await state.update_data(existing_categories=categories)
+    if rows:
+        await message.answer(
+            "Выберите <b>категорию</b> товара или введите новую текстом:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows)
+        )
+    else:
+        await message.answer("Введите <b>категорию</b> товара (например: Худи, Шапки, Аксессуары):")
+
+
+@router.callback_query(AdminAddProduct.category, F.data.startswith("adm_cat_pick:"))
+async def adm_product_category_pick(call: CallbackQuery, state: FSMContext):
+    idx = int(call.data.split(":")[1])
+    data = await state.get_data()
+    categories = data.get("existing_categories", [])
+    try:
+        category = categories[idx]
+    except IndexError:
+        await call.answer()
+        return
+    await state.update_data(category=category)
+    await state.set_state(AdminAddProduct.price)
+    await call.message.answer(f"Категория: <b>{category}</b>\nВведите <b>цену</b> (например: 49.99):")
+    await call.answer()
+
+
+@router.message(AdminAddProduct.category)
+async def adm_product_category_text(message: Message, state: FSMContext):
+    category = message.text.strip()
+    if not category:
+        await message.answer("Название категории не может быть пустым. Введите категорию:")
+        return
+    await state.update_data(category=category)
     await state.set_state(AdminAddProduct.price)
     await message.answer("Введите <b>цену</b> (например: 49.99):")
 
@@ -1923,7 +2089,8 @@ async def adm_product_stock(message: Message, state: FSMContext):
         old_price=data.get("old_price"),
         photos=data.get("photos", []),
         sizes=data["sizes"],
-        colors=data["colors"]
+        colors=data["colors"],
+        category=data.get("category", "Разное")
     )
 
     for size, color, qty in stock_data:
@@ -1963,6 +2130,7 @@ async def cb_adm_edit_field(call: CallbackQuery, state: FSMContext):
     prompts = {
         "name": "Введите новое название:",
         "description": "Введите новое описание:",
+        "category": "Введите новую категорию:",
         "price": "Введите новую цену:",
         "old_price": "Введите новую старую цену (0 для удаления):",
         "sizes": "Введите размеры через запятую:",
@@ -2082,7 +2250,7 @@ async def cb_adm_order(call: CallbackQuery):
 
     items = json.loads(order["items"])
     items_text = format_order_items_text(items)
-    promo_info = f"\n🎟 Промокод: {order['promo_code']} (-{order['discount_amount']}₽)" if order["promo_code"] else ""
+    promo_info = f"\n🎟 Промокод: {order['promo_code']} (-{order['discount_amount']}€)" if order["promo_code"] else ""
 
     status_emoji = {
         "pending": "⏳", "paid": "💳", "confirmed": "✅", "rejected": "❌"
@@ -2100,7 +2268,7 @@ async def cb_adm_order(call: CallbackQuery):
         f"📍 {order['address']}\n\n"
         f"🛍 {items_text}"
         f"{promo_info}\n\n"
-        f"💰 Итого: {order['total']:.2f}₽\n"
+        f"💰 Итого: {order['total']:.2f}€\n"
         f"📅 {order['created_at'][:16]}"
     )
 
@@ -2141,7 +2309,7 @@ async def cb_adm_promo(call: CallbackQuery):
     if not promo:
         await call.answer("Не найден")
         return
-    disc = f"{promo['value']}%" if promo["type"] == "percent" else f"{promo['value']}₽"
+    disc = f"{promo['value']}%" if promo["type"] == "percent" else f"{promo['value']}€"
     status = "✅ Активен" if promo["is_active"] else "❌ Отключён"
     text = (
         f"🎟 <b>{promo['code']}</b>\n"
@@ -2196,7 +2364,7 @@ async def adm_promo_code(message: Message, state: FSMContext):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(text="% Процент", callback_data="promo_type:percent"),
-                InlineKeyboardButton(text="₽ Фиксированная", callback_data="promo_type:fixed"),
+                InlineKeyboardButton(text="€ Фиксированная", callback_data="promo_type:fixed"),
             ]
         ])
     )
@@ -2222,7 +2390,7 @@ async def adm_promo_value(message: Message, state: FSMContext):
     data = await state.get_data()
     db_add_promo(data["code"], data["ptype"], value)
     await state.clear()
-    disc = f"{value}%" if data["ptype"] == "percent" else f"{value}₽"
+    disc = f"{value}%" if data["ptype"] == "percent" else f"{value}€"
     await message.answer(
         f"✅ Промокод <b>{data['code']}</b> (-{disc}) создан.",
         reply_markup=kb_admin_main()
@@ -2312,7 +2480,7 @@ async def admin_stats(message: Message, state: FSMContext):
         f"📊 <b>Статистика {SHOP_NAME}</b>\n\n"
         f"👥 Пользователей: {users_count}\n"
         f"📦 Заказов: {orders_count}\n"
-        f"💰 Выручка: {revenue:.2f}₽"
+        f"💰 Выручка: {revenue:.2f}€"
         f"{pop_text}"
     )
 
