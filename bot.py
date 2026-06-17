@@ -1679,6 +1679,8 @@ async def handle_my_orders(message: Message, state: FSMContext):
     T["settings"].get(l) for l in LANGUAGES
 ] if v]))
 async def handle_settings(message: Message, state: FSMContext):
+    if is_admin(message.from_user.id):
+        return  # Let admin handler take over
     await state.clear()
     lang = db_get_lang(message.from_user.id)
     await message.answer(
@@ -1691,8 +1693,9 @@ async def handle_settings(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "change_lang")
 async def cb_change_lang(call: CallbackQuery, state: FSMContext):
+    lang = db_get_lang(call.from_user.id)
     await state.set_state(LangState.choosing)
-    await call.message.answer(T["welcome"]["ru"], reply_markup=kb_lang_select())
+    await call.message.answer(T["welcome"].get(lang, T["welcome"]["ru"]), reply_markup=kb_lang_select())
     await call.answer()
 
 
@@ -1859,14 +1862,6 @@ async def adm_product_photo(message: Message, state: FSMContext):
     photos.append(file_id)
     await state.update_data(photos=photos)
     await message.answer(f"Фото {len(photos)}/10 принято. Отправьте ещё или /done")
-
-
-@router.message(AdminAddProduct.photos, Command("done"))
-async def adm_product_photos_done(message: Message, state: FSMContext):
-    await state.set_state(AdminAddProduct.sizes)
-    await message.answer(
-        "Введите <b>размеры</b> через запятую (например: XS, S, M, L, XL):"
-    )
 
 
 @router.message(AdminAddProduct.sizes)
