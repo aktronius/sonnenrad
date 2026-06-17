@@ -157,11 +157,11 @@ T: Dict[str, Dict[str, str]] = {
         "sv": "🛒 Varukorgen är tom.",
     },
     "cart_total": {
-        "ru": "💰 Итого: {total} €",
-        "uk": "💰 Разом: {total} €",
-        "en": "💰 Total: {total} €",
-        "no": "💰 Totalt: {total} €",
-        "sv": "💰 Totalt: {total} €",
+        "ru": "💰 Итого: {total} ₽",
+        "uk": "💰 Разом: {total} ₽",
+        "en": "💰 Total: {total} ₽",
+        "no": "💰 Totalt: {total} ₽",
+        "sv": "💰 Totalt: {total} ₽",
     },
     "checkout": {
         "ru": "✅ Оформить заказ",
@@ -234,11 +234,11 @@ T: Dict[str, Dict[str, str]] = {
         "sv": "❌ Ogiltig eller inaktiv kampanjkod.",
     },
     "order_confirm": {
-        "ru": "📋 Подтверждение заказа:\n\n{items}\n\n👤 Имя: {name}\n📱 Телефон: {phone}\n📍 Адрес: {address}\n{promo_line}\n💰 Итого: {total} €\n\nПодтвердить заказ?",
-        "uk": "📋 Підтвердження замовлення:\n\n{items}\n\n👤 Ім'я: {name}\n📱 Телефон: {phone}\n📍 Адреса: {address}\n{promo_line}\n💰 Разом: {total} €\n\nПідтвердити замовлення?",
-        "en": "📋 Order Confirmation:\n\n{items}\n\n👤 Name: {name}\n📱 Phone: {phone}\n📍 Address: {address}\n{promo_line}\n💰 Total: {total} €\n\nConfirm order?",
-        "no": "📋 Ordrebekreftelse:\n\n{items}\n\n👤 Navn: {name}\n📱 Telefon: {phone}\n📍 Adresse: {address}\n{promo_line}\n💰 Totalt: {total} €\n\nBekreft bestilling?",
-        "sv": "📋 Orderbekräftelse:\n\n{items}\n\n👤 Namn: {name}\n📱 Telefon: {phone}\n📍 Adress: {address}\n{promo_line}\n💰 Totalt: {total} €\n\nBekräfta beställning?",
+        "ru": "📋 Подтверждение заказа:\n\n{items}\n\n👤 Имя: {name}\n📱 Телефон: {phone}\n📍 Адрес: {address}\n{promo_line}\n💰 Итого: {total} ₽\n\nПодтвердить заказ?",
+        "uk": "📋 Підтвердження замовлення:\n\n{items}\n\n👤 Ім'я: {name}\n📱 Телефон: {phone}\n📍 Адреса: {address}\n{promo_line}\n💰 Разом: {total} ₽\n\nПідтвердити замовлення?",
+        "en": "📋 Order Confirmation:\n\n{items}\n\n👤 Name: {name}\n📱 Phone: {phone}\n📍 Address: {address}\n{promo_line}\n💰 Total: {total} ₽\n\nConfirm order?",
+        "no": "📋 Ordrebekreftelse:\n\n{items}\n\n👤 Navn: {name}\n📱 Telefon: {phone}\n📍 Adresse: {address}\n{promo_line}\n💰 Totalt: {total} ₽\n\nBekreft bestilling?",
+        "sv": "📋 Orderbekräftelse:\n\n{items}\n\n👤 Namn: {name}\n📱 Telefon: {phone}\n📍 Adress: {address}\n{promo_line}\n💰 Totalt: {total} ₽\n\nBekräfta beställning?",
     },
     "confirm": {
         "ru": "✅ Подтвердить",
@@ -374,11 +374,11 @@ T: Dict[str, Dict[str, str]] = {
         "sv": "🎟 Kampanj: {code} (-{discount})",
     },
     "old_price": {
-        "ru": "~~{old_price} €~~",
-        "uk": "~~{old_price} €~~",
-        "en": "~~{old_price} €~~",
-        "no": "~~{old_price} €~~",
-        "sv": "~~{old_price} €~~",
+        "ru": "~~{old_price} ₽~~",
+        "uk": "~~{old_price} ₽~~",
+        "en": "~~{old_price} ₽~~",
+        "no": "~~{old_price} ₽~~",
+        "sv": "~~{old_price} ₽~~",
     },
     "page": {
         "ru": "Стр. {page}/{total}",
@@ -1072,7 +1072,7 @@ def kb_admin_products(products) -> InlineKeyboardMarkup:
         for p in grouped[cat]:
             status = "✅" if p["is_active"] else "❌"
             rows.append([InlineKeyboardButton(
-                text=f"{status} {p['name']} — {p['price']}€",
+                text=f"{status} {p['name']} — {p['price']}₽",
                 callback_data=f"adm_prod:{p['id']}"
             )])
     rows.append([InlineKeyboardButton(text="➕ Добавить товар", callback_data="adm_add_product")])
@@ -1108,7 +1108,7 @@ def kb_admin_promos(promos) -> InlineKeyboardMarkup:
     rows = []
     for p in promos:
         status = "✅" if p["is_active"] else "❌"
-        disc = f"{p['value']}%" if p["type"] == "percent" else f"{p['value']}€"
+        disc = f"{p['value']}%" if p["type"] == "percent" else f"{p['value']}₽"
         rows.append([
             InlineKeyboardButton(
                 text=f"{status} {p['code']} -{disc}",
@@ -1136,7 +1136,7 @@ def kb_admin_orders(orders) -> InlineKeyboardMarkup:
     for o in orders[:20]:
         icon = status_map.get(o["status"], "❓")
         rows.append([InlineKeyboardButton(
-            text=f"{icon} #{o['id']} {o['name']} — {o['total']}€",
+            text=f"{icon} #{o['id']} {o['name']} — {o['total']}₽",
             callback_data=f"adm_order:{o['id']}"
         )])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -1167,7 +1167,7 @@ def format_items_for_order(cart_items) -> list:
 def format_order_items_text(items: list) -> str:
     lines = []
     for i in items:
-        lines.append(f"• {i['name']} | {i['size']} | {i['color']} x{i['quantity']} — {i['price'] * i['quantity']:.2f}€")
+        lines.append(f"• {i['name']} | {i['size']} | {i['color']} x{i['quantity']} — {i['price'] * i['quantity']:.2f}₽")
     return "\n".join(lines)
 
 
@@ -1177,7 +1177,7 @@ def apply_discount(total: float, promo: sqlite3.Row) -> tuple:
         discount_str = f"{promo['value']}%"
     else:
         discount = min(promo["value"], total)
-        discount_str = f"{promo['value']}€"
+        discount_str = f"{promo['value']}₽"
     return discount, discount_str
 
 
@@ -1304,13 +1304,13 @@ async def show_catalog_page(message: Message, state: FSMContext, lang: str, page
 
         old_price_text = ""
         if product["old_price"]:
-            old_price_text = f"\n<s>{product['old_price']} €</s>"
+            old_price_text = f"\n<s>{product['old_price']} ₽</s>"
 
         caption = (
             f"<b>{product['name']}</b>\n"
             f"{product['description'] or ''}\n"
             f"{old_price_text}"
-            f"\n<b>{product['price']} €</b>\n"
+            f"\n<b>{product['price']} ₽</b>\n"
             f"📐 {', '.join(sizes)}\n"
             f"🎨 {', '.join(colors)}"
         )
@@ -1457,6 +1457,7 @@ async def cb_cart_dec(call: CallbackQuery):
     cart = db_get_cart(call.from_user.id)
     if not cart:
         await call.message.edit_text(t("cart_empty", lang))
+        await call.message.answer(t("main_menu", lang), reply_markup=kb_main_menu(lang))
         await call.answer()
         return
     total = calc_cart_total(cart)
@@ -1498,6 +1499,7 @@ async def cb_cart_del(call: CallbackQuery):
     cart = db_get_cart(call.from_user.id)
     if not cart:
         await call.message.edit_text(t("cart_empty", lang))
+        await call.message.answer(t("main_menu", lang), reply_markup=kb_main_menu(lang))
         await call.answer()
         return
     total = calc_cart_total(cart)
@@ -1513,6 +1515,7 @@ async def cb_cart_clear(call: CallbackQuery):
     db_clear_cart(call.from_user.id)
     lang = db_get_lang(call.from_user.id)
     await call.message.edit_text(t("cart_cleared", lang))
+    await call.message.answer(t("main_menu", lang), reply_markup=kb_main_menu(lang))
     await call.answer()
 
 
@@ -1687,7 +1690,7 @@ async def cb_paid(call: CallbackQuery):
     username = f"@{user['username']}" if user and user["username"] else "—"
 
     items_text = format_order_items_text(items)
-    promo_info = f"\n🎟 Промокод: {order['promo_code']} (-{order['discount_amount']}€)" if order["promo_code"] else ""
+    promo_info = f"\n🎟 Промокод: {order['promo_code']} (-{order['discount_amount']}₽)" if order["promo_code"] else ""
 
     admin_text = (
         f"🛒 <b>Новый оплаченный заказ #{order_id}</b>\n\n"
@@ -1698,7 +1701,7 @@ async def cb_paid(call: CallbackQuery):
         f"📍 Адрес: {order['address']}\n\n"
         f"🛍 Товары:\n{items_text}"
         f"{promo_info}\n\n"
-        f"💰 Итого: {order['total']:.2f}€"
+        f"💰 Итого: {order['total']:.2f}₽"
     )
 
     for admin_id in ADMIN_IDS:
@@ -1795,7 +1798,7 @@ async def handle_my_orders(message: Message, state: FSMContext):
             f"📦 <b>Заказ #{o['id']}</b>\n"
             f"{status}\n"
             f"{items_short}\n"
-            f"💰 {o['total']:.2f}€\n"
+            f"💰 {o['total']:.2f}₽\n"
             f"📅 {o['created_at'][:10]}\n\n"
         )
 
@@ -1820,8 +1823,9 @@ async def handle_settings(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "change_lang")
 async def cb_change_lang(call: CallbackQuery, state: FSMContext):
+    lang = db_get_lang(call.from_user.id)
     await state.set_state(LangState.choosing)
-    await call.message.answer(T["welcome"]["ru"], reply_markup=kb_lang_select())
+    await call.message.answer(t("welcome", lang), reply_markup=kb_lang_select())
     await call.answer()
 
 
@@ -1888,8 +1892,8 @@ async def cb_adm_product(call: CallbackQuery):
         f"<b>{product['name']}</b>\n"
         f"{product['description'] or ''}\n\n"
         f"🏷 Категория: {product['category'] or 'Разное'}\n"
-        f"💰 Цена: {product['price']} €"
-        + (f" | Старая: {product['old_price']} €" if product["old_price"] else "") + "\n"
+        f"💰 Цена: {product['price']} ₽"
+        + (f" | Старая: {product['old_price']} ₽" if product["old_price"] else "") + "\n"
         f"📐 Размеры: {', '.join(sizes)}\n"
         f"🎨 Цвета: {', '.join(colors)}\n"
         f"🖼 Фото: {len(photos)}\n"
@@ -2250,7 +2254,7 @@ async def cb_adm_order(call: CallbackQuery):
 
     items = json.loads(order["items"])
     items_text = format_order_items_text(items)
-    promo_info = f"\n🎟 Промокод: {order['promo_code']} (-{order['discount_amount']}€)" if order["promo_code"] else ""
+    promo_info = f"\n🎟 Промокод: {order['promo_code']} (-{order['discount_amount']}₽)" if order["promo_code"] else ""
 
     status_emoji = {
         "pending": "⏳", "paid": "💳", "confirmed": "✅", "rejected": "❌"
@@ -2268,7 +2272,7 @@ async def cb_adm_order(call: CallbackQuery):
         f"📍 {order['address']}\n\n"
         f"🛍 {items_text}"
         f"{promo_info}\n\n"
-        f"💰 Итого: {order['total']:.2f}€\n"
+        f"💰 Итого: {order['total']:.2f}₽\n"
         f"📅 {order['created_at'][:16]}"
     )
 
@@ -2309,7 +2313,7 @@ async def cb_adm_promo(call: CallbackQuery):
     if not promo:
         await call.answer("Не найден")
         return
-    disc = f"{promo['value']}%" if promo["type"] == "percent" else f"{promo['value']}€"
+    disc = f"{promo['value']}%" if promo["type"] == "percent" else f"{promo['value']}₽"
     status = "✅ Активен" if promo["is_active"] else "❌ Отключён"
     text = (
         f"🎟 <b>{promo['code']}</b>\n"
@@ -2364,7 +2368,7 @@ async def adm_promo_code(message: Message, state: FSMContext):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(text="% Процент", callback_data="promo_type:percent"),
-                InlineKeyboardButton(text="€ Фиксированная", callback_data="promo_type:fixed"),
+                InlineKeyboardButton(text="₽ Фиксированная", callback_data="promo_type:fixed"),
             ]
         ])
     )
@@ -2390,7 +2394,7 @@ async def adm_promo_value(message: Message, state: FSMContext):
     data = await state.get_data()
     db_add_promo(data["code"], data["ptype"], value)
     await state.clear()
-    disc = f"{value}%" if data["ptype"] == "percent" else f"{value}€"
+    disc = f"{value}%" if data["ptype"] == "percent" else f"{value}₽"
     await message.answer(
         f"✅ Промокод <b>{data['code']}</b> (-{disc}) создан.",
         reply_markup=kb_admin_main()
@@ -2480,7 +2484,7 @@ async def admin_stats(message: Message, state: FSMContext):
         f"📊 <b>Статистика {SHOP_NAME}</b>\n\n"
         f"👥 Пользователей: {users_count}\n"
         f"📦 Заказов: {orders_count}\n"
-        f"💰 Выручка: {revenue:.2f}€"
+        f"💰 Выручка: {revenue:.2f}₽"
         f"{pop_text}"
     )
 
