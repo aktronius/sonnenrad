@@ -53,41 +53,62 @@ T: Dict[str, Dict[str, str]] = {
         "ru": (
             "☀️ <b>Добро пожаловать в Sönnenrad!</b>\n\n"
             "Мы — языческий магазин северной традиции. "
-            "Здесь вы найдёте амулеты, украшения и атрибутику, "
-            "созданные с уважением к древним символам и культуре предков: "
-            "Мьёльниры, Валькнуты, руны, Одал и многое другое.\n\n"
+            "У нас вы найдёте одежду и аксессуары, созданные с духом древних символов:\n\n"
+            "👕 Футболки, поло и кофты\n"
+            "🧥 Свитшоты и худи\n"
+            "🧢 Кепки и головные уборы\n"
+            "👜 Сумки и рюкзаки\n"
+            "👗 Женская одежда\n"
+            "⚡ Мьёльниры, руны, Валькнут и другая атрибутика\n\n"
+            "Каждая вещь создана с уважением к культуре предков.\n\n"
             "⚒ Выберите язык, чтобы начать:"
         ),
         "uk": (
             "☀️ <b>Ласкаво просимо до Sönnenrad!</b>\n\n"
             "Ми — язичницький магазин північної традиції. "
-            "Тут ви знайдете амулети, прикраси та атрибутику, "
-            "створені з повагою до давніх символів: "
-            "Мьйольніри, Валькнути, руни, Одал та багато іншого.\n\n"
+            "У нас ви знайдете одяг та аксесуари з духом давніх символів:\n\n"
+            "👕 Футболки, поло та кофти\n"
+            "🧥 Світшоти та худі\n"
+            "🧢 Кепки та головні убори\n"
+            "👜 Сумки та рюкзаки\n"
+            "👗 Жіночий одяг\n"
+            "⚡ Мьйольніри, руни, Валькнут та інша атрибутика\n\n"
             "⚒ Оберіть мову, щоб почати:"
         ),
         "en": (
             "☀️ <b>Welcome to Sönnenrad!</b>\n\n"
             "We are a pagan shop of the Northern Tradition. "
-            "Here you'll find amulets, jewellery and sacred items "
-            "crafted with respect for ancient symbols and ancestral culture: "
-            "Mjölnirs, Valknut, runes, Othala and much more.\n\n"
+            "Here you'll find clothing and accessories inspired by ancient symbols:\n\n"
+            "👕 T-shirts, polo shirts and hoodies\n"
+            "🧥 Sweatshirts and pullovers\n"
+            "🧢 Caps and headwear\n"
+            "👜 Bags and backpacks\n"
+            "👗 Women's clothing\n"
+            "⚡ Mjölnirs, runes, Valknut and sacred items\n\n"
             "⚒ Choose your language to begin:"
         ),
         "no": (
             "☀️ <b>Velkommen til Sönnenrad!</b>\n\n"
             "Vi er en hedensk butikk i den nordiske tradisjonen. "
-            "Her finner du amuletter, smykker og hellige gjenstander "
-            "laget med respekt for gamle symboler: "
-            "Mjølner, Valknut, runer, Othala og mye mer.\n\n"
+            "Her finner du klær og tilbehør inspirert av gamle symboler:\n\n"
+            "👕 T-skjorter, poloskjorter og hettegensere\n"
+            "🧥 Sweatshirts og gensere\n"
+            "🧢 Caps og hodeplagg\n"
+            "👜 Vesker og ryggsekker\n"
+            "👗 Dameklær\n"
+            "⚡ Mjølner, runer, Valknut og hellige gjenstander\n\n"
             "⚒ Velg språk for å begynne:"
         ),
         "sv": (
             "☀️ <b>Välkommen till Sönnenrad!</b>\n\n"
             "Vi är en hednisk butik i den nordiska traditionen. "
-            "Här hittar du amuletter, smycken och heliga föremål "
-            "skapade med respekt för gamla symboler: "
-            "Mjölnir, Valknut, runor, Othala och mycket mer.\n\n"
+            "Här hittar du kläder och accessoarer inspirerade av gamla symboler:\n\n"
+            "👕 T-shirts, pikétröjor och hoodies\n"
+            "🧥 Sweatshirts och tröjor\n"
+            "🧢 Kepsar och huvudbonader\n"
+            "👜 Väskor och ryggsäckar\n"
+            "👗 Damkläder\n"
+            "⚡ Mjölnir, runor, Valknut och heliga föremål\n\n"
             "⚒ Välj språk för att börja:"
         ),
     },
@@ -1501,7 +1522,6 @@ async def cmd_start(message: Message, state: FSMContext):
 
     # Admins bypass maintenance
     if not is_admin(tg_id) and db_is_maintenance():
-        # Определяем язык (en по умолчанию для новых)
         lang = db_get_lang(tg_id) or "ru"
         text = build_maintenance_text(lang)
         if os.path.exists(LOGO_PATH):
@@ -1559,29 +1579,99 @@ async def cb_lang_chosen(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-# ─────── CATALOG ───────
+# ──────────────────────────────────────────────────────────────
+# ВАЖНО: распознавание кнопок главного меню
+#
+# Раньше использовалось 4 отдельных хендлера F.text.in_(SET),
+# зарегистрированных в РАЗНОМ порядке относительно других хендлеров.
+# Здесь это сведено в ОДИН надёжный хендлер с StateFilter(None),
+# чтобы он не перехватывал текст, когда пользователь находится
+# в любом FSM-состоянии (checkout, admin-формы и т.д.), и чтобы
+# не было риска, что какой-то другой "общий" хендлер выше по файлу
+# перехватит сообщение раньше.
+# ──────────────────────────────────────────────────────────────
 
-CATALOG_TEXTS = set()
-for _lang in LANGUAGES:
-    _v = T["catalog"].get(_lang)
-    if _v:
-        CATALOG_TEXTS.add(_v)
+def _collect_translations(key: str) -> set:
+    result = set()
+    for value in T.get(key, {}).values():
+        if value:
+            result.add(value)
+    return result
 
 
-@router.message(F.text.in_(CATALOG_TEXTS))
-async def handle_catalog(message: Message, state: FSMContext):
+CATALOG_TEXTS = _collect_translations("catalog")
+CART_TEXTS = _collect_translations("cart")
+MY_ORDERS_TEXTS = _collect_translations("my_orders")
+SETTINGS_TEXTS = _collect_translations("settings")
+
+ALL_MENU_TEXTS = CATALOG_TEXTS | CART_TEXTS | MY_ORDERS_TEXTS | SETTINGS_TEXTS
+
+
+@router.message(StateFilter(None), F.text.in_(ALL_MENU_TEXTS))
+async def handle_main_menu_buttons(message: Message, state: FSMContext):
     if is_admin(message.from_user.id):
+        # У админа свои текстовые кнопки (см. ниже), но если совпал текст
+        # пользовательского меню — всё равно обработаем как обычный юзер,
+        # чтобы админ тоже мог пользоваться магазином через /start.
+        pass
+
+    tg_id = message.from_user.id
+    lang = db_get_lang(tg_id)
+    text = message.text
+
+    if text in CATALOG_TEXTS:
+        categories = db_get_active_categories()
+        if not categories:
+            await message.answer(t("no_categories", lang))
+            return
+        await message.answer(
+            t("choose_category", lang),
+            reply_markup=kb_categories(categories, lang)
+        )
         return
-    await state.clear()
-    lang = db_get_lang(message.from_user.id)
-    categories = db_get_active_categories()
-    if not categories:
-        await message.answer(t("no_categories", lang))
+
+    if text in CART_TEXTS:
+        cart = db_get_cart(tg_id)
+        if not cart:
+            await message.answer(t("cart_empty", lang))
+            return
+        await message.answer(build_cart_text(cart, lang), reply_markup=kb_cart(cart, lang))
         return
-    await message.answer(
-        t("choose_category", lang),
-        reply_markup=kb_categories(categories, lang)
-    )
+
+    if text in MY_ORDERS_TEXTS:
+        orders = db_get_user_orders(tg_id)
+        if not orders:
+            await message.answer(t("no_orders", lang))
+            return
+        status_map = {
+            "pending": t("order_status_pending", lang),
+            "paid": t("order_status_paid", lang),
+            "confirmed": t("order_status_confirmed", lang),
+            "rejected": t("order_status_rejected", lang),
+        }
+        lines = ["📦 <b>Ваши заказы:</b>\n"]
+        for o in orders[:10]:
+            status = status_map.get(o["status"], o["status"])
+            items = json.loads(o["items"])
+            items_short = ", ".join(f"{i['name']} ×{i['quantity']}" for i in items)
+            lines.append(
+                f"<b>Заказ #{o['id']}</b>\n"
+                f"├ Статус: {status}\n"
+                f"├ {items_short}\n"
+                f"├ 💰 {o['total']:.2f} ₽\n"
+                f"└ 📅 {o['created_at'][:10]}\n"
+            )
+        await message.answer("\n".join(lines))
+        return
+
+    if text in SETTINGS_TEXTS:
+        await message.answer(
+            f"⚙️ <b>{t('settings', lang)}</b>",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=t("change_language", lang), callback_data="change_lang")]
+            ])
+        )
+        return
 
 
 @router.callback_query(F.data == "catalog_back")
@@ -1762,31 +1852,7 @@ async def cb_go_to_cart(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-# ─────── CART ───────
-
-CART_TEXTS = set()
-for _lang in LANGUAGES:
-    _v = T["cart"].get(_lang)
-    if _v:
-        CART_TEXTS.add(_v)
-
-
-@router.message(F.text.in_(CART_TEXTS))
-async def handle_cart(message: Message, state: FSMContext):
-    if is_admin(message.from_user.id):
-        return
-    await state.clear()
-    tg_id = message.from_user.id
-    lang = db_get_lang(tg_id)
-    cart = db_get_cart(tg_id)
-
-    if not cart:
-        await message.answer(t("cart_empty", lang))
-        return
-
-    text = build_cart_text(cart, lang)
-    await message.answer(text, reply_markup=kb_cart(cart, lang))
-
+# ─────── CART CALLBACKS ───────
 
 @router.callback_query(F.data.startswith("cart_dec:"))
 async def cb_cart_dec(call: CallbackQuery):
@@ -2136,72 +2202,7 @@ async def cb_admin_reject(call: CallbackQuery):
     await call.answer()
 
 
-# ─────── MY ORDERS ───────
-
-MY_ORDERS_TEXTS = set()
-for _lang in LANGUAGES:
-    _v = T["my_orders"].get(_lang)
-    if _v:
-        MY_ORDERS_TEXTS.add(_v)
-
-
-@router.message(F.text.in_(MY_ORDERS_TEXTS))
-async def handle_my_orders(message: Message, state: FSMContext):
-    if is_admin(message.from_user.id):
-        return
-    await state.clear()
-    tg_id = message.from_user.id
-    lang = db_get_lang(tg_id)
-    orders = db_get_user_orders(tg_id)
-    if not orders:
-        await message.answer(t("no_orders", lang))
-        return
-
-    status_map = {
-        "pending": t("order_status_pending", lang),
-        "paid": t("order_status_paid", lang),
-        "confirmed": t("order_status_confirmed", lang),
-        "rejected": t("order_status_rejected", lang),
-    }
-
-    lines = ["📦 <b>Ваши заказы:</b>\n"]
-    for o in orders[:10]:
-        status = status_map.get(o["status"], o["status"])
-        items = json.loads(o["items"])
-        items_short = ", ".join(f"{i['name']} ×{i['quantity']}" for i in items)
-        lines.append(
-            f"<b>Заказ #{o['id']}</b>\n"
-            f"├ Статус: {status}\n"
-            f"├ {items_short}\n"
-            f"├ 💰 {o['total']:.2f} ₽\n"
-            f"└ 📅 {o['created_at'][:10]}\n"
-        )
-
-    await message.answer("\n".join(lines))
-
-
-# ─────── SETTINGS ───────
-
-SETTINGS_TEXTS = set()
-for _lang in LANGUAGES:
-    _v = T["settings"].get(_lang)
-    if _v:
-        SETTINGS_TEXTS.add(_v)
-
-
-@router.message(F.text.in_(SETTINGS_TEXTS))
-async def handle_settings(message: Message, state: FSMContext):
-    if is_admin(message.from_user.id):
-        return
-    await state.clear()
-    lang = db_get_lang(message.from_user.id)
-    await message.answer(
-        f"⚙️ <b>{t('settings', lang)}</b>",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=t("change_language", lang), callback_data="change_lang")]
-        ])
-    )
-
+# ─────── SETTINGS CALLBACK ───────
 
 @router.callback_query(F.data == "change_lang")
 async def cb_change_lang(call: CallbackQuery, state: FSMContext):
@@ -2230,7 +2231,7 @@ async def cmd_admin(message: Message, state: FSMContext):
     )
 
 
-@router.message(F.text == "🏠 Выход из панели")
+@router.message(StateFilter(None), F.text == "🏠 Выход из панели")
 async def admin_exit(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
@@ -2241,7 +2242,7 @@ async def admin_exit(message: Message, state: FSMContext):
 
 # ─────── ADMIN: MAINTENANCE ───────
 
-@router.message(F.text == "🔧 Тех. перерыв")
+@router.message(StateFilter(None), F.text == "🔧 Тех. перерыв")
 async def admin_maintenance(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
@@ -2428,7 +2429,7 @@ async def cb_maint_bc_confirm(call: CallbackQuery):
 
 # ─────── ADMIN: CATEGORIES ───────
 
-@router.message(F.text == "🗂 Категории")
+@router.message(StateFilter(None), F.text == "🗂 Категории")
 async def admin_categories(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
@@ -2626,7 +2627,7 @@ async def adm_cat_edit_value(message: Message, state: FSMContext):
 
 # ─────── ADMIN: PRODUCTS ───────
 
-@router.message(F.text == "🛍 Товары")
+@router.message(StateFilter(None), F.text == "🛍 Товары")
 async def admin_products(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
@@ -3078,7 +3079,7 @@ async def adm_stock_input(message: Message, state: FSMContext):
 
 # ─────── ADMIN: ORDERS ───────
 
-@router.message(F.text == "📦 Заказы")
+@router.message(StateFilter(None), F.text == "📦 Заказы")
 async def admin_orders(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
@@ -3153,7 +3154,7 @@ async def cb_adm_order(call: CallbackQuery):
 
 # ─────── ADMIN: PROMOS ───────
 
-@router.message(F.text == "🎟 Промокоды")
+@router.message(StateFilter(None), F.text == "🎟 Промокоды")
 async def admin_promos(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
@@ -3295,7 +3296,7 @@ async def adm_promo_value(message: Message, state: FSMContext):
 
 # ─────── ADMIN: CLIENTS ───────
 
-@router.message(F.text == "👥 Клиенты")
+@router.message(StateFilter(None), F.text == "👥 Клиенты")
 async def admin_clients(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
@@ -3319,7 +3320,7 @@ async def admin_clients(message: Message, state: FSMContext):
 
 # ─────── ADMIN: BROADCAST ───────
 
-@router.message(F.text == "📢 Рассылка")
+@router.message(StateFilter(None), F.text == "📢 Рассылка")
 async def admin_broadcast_start(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
@@ -3407,7 +3408,7 @@ async def admin_broadcast_cancel(call: CallbackQuery, state: FSMContext):
 
 # ─────── ADMIN: STATISTICS ───────
 
-@router.message(F.text == "📊 Статистика")
+@router.message(StateFilter(None), F.text == "📊 Статистика")
 async def admin_stats(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
@@ -3430,7 +3431,7 @@ async def admin_stats(message: Message, state: FSMContext):
 
 # ─────── ADMIN: SETTINGS ───────
 
-@router.message(F.text == "⚙️ Настройки")
+@router.message(StateFilter(None), F.text == "⚙️ Настройки")
 async def admin_settings(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
