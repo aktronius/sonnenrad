@@ -27,13 +27,15 @@ BOT_TOKEN = "8739516166:AAGVEq4oeNb42aY-uDY1vCMOj9mNhsvucmI"
 
 ADMIN_IDS = [7752932648, 8379783147]
 
+# Пароль для входа в админ-панель
+ADMIN_PASSWORD = "1329"
+
 DB_PATH = "sonnenrad.db"
 
 SHOP_NAME = "Sönnenrad"
 
 DEFAULT_PAYMENT_LINK = "https://www.tinkoff.ru/rm/r_HbPZNUiqBU.jnNWRPlZwL/vygOe35729"
 
-# Путь к логотипу для приветствия
 LOGO_PATH = "sonnenrad_logo.jpg"
 
 # ─────────────────────────────────────────────
@@ -533,8 +535,8 @@ T: Dict[str, Dict[str, str]] = {
         "sv": "🛒 Lägg i varukorg",
     },
     "back_to_catalog": {
-        "ru": "📋 В каталог",
-        "uk": "📋 До каталогу",
+        "ru": "📋 К категориям",
+        "uk": "📋 До категорій",
         "en": "📋 Back to Catalog",
         "no": "📋 Tilbake til katalog",
         "sv": "📋 Tillbaka till katalog",
@@ -566,6 +568,13 @@ T: Dict[str, Dict[str, str]] = {
         "en": "🎟 Promo: {code} (-{discount})\n",
         "no": "🎟 Kampanje: {code} (-{discount})\n",
         "sv": "🎟 Kampanj: {code} (-{discount})\n",
+    },
+    "banned_message": {
+        "ru": "🚫 <b>Ваш аккаунт заблокирован.</b>\n\nОбратитесь в поддержку.",
+        "uk": "🚫 <b>Ваш акаунт заблокований.</b>\n\nЗверніться до підтримки.",
+        "en": "🚫 <b>Your account is banned.</b>\n\nPlease contact support.",
+        "no": "🚫 <b>Kontoen din er utestengt.</b>\n\nKontakt support.",
+        "sv": "🚫 <b>Ditt konto är blockerat.</b>\n\nKontakta support.",
     },
 }
 
@@ -601,6 +610,8 @@ def init_db():
         first_name TEXT,
         last_name TEXT,
         lang TEXT DEFAULT 'en',
+        is_banned INTEGER DEFAULT 0,
+        note TEXT DEFAULT '',
         created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -677,11 +688,20 @@ def init_db():
     );
     """)
 
+    # Добавляем колонки если их нет (для существующих БД)
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN note TEXT DEFAULT ''")
+    except Exception:
+        pass
+
     c.execute(
         "INSERT OR IGNORE INTO settings (key, value) VALUES ('payment_link', ?)",
         (DEFAULT_PAYMENT_LINK,)
     )
-    # maintenance: 0=открыт, 1=закрыт
     c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('maintenance', '0')")
     c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('maintenance_time', '')")
     conn.commit()
@@ -721,6 +741,32 @@ def db_set_lang(tg_id: int, lang: str):
 def db_get_lang(tg_id: int) -> str:
     user = db_get_user(tg_id)
     return user["lang"] if user else "en"
+
+
+def db_is_banned(tg_id: int) -> bool:
+    user = db_get_user(tg_id)
+    return bool(user and user["is_banned"])
+
+
+def db_ban_user(tg_id: int):
+    conn = get_db()
+    conn.execute("UPDATE users SET is_banned=1 WHERE tg_id=?", (tg_id,))
+    conn.commit()
+    conn.close()
+
+
+def db_unban_user(tg_id: int):
+    conn = get_db()
+    conn.execute("UPDATE users SET is_banned=0 WHERE tg_id=?", (tg_id,))
+    conn.commit()
+    conn.close()
+
+
+def db_set_user_note(tg_id: int, note: str):
+    conn = get_db()
+    conn.execute("UPDATE users SET note=? WHERE tg_id=?", (note, tg_id))
+    conn.commit()
+    conn.close()
 
 
 def db_is_maintenance() -> bool:
@@ -972,7 +1018,7 @@ def db_set_setting(key: str, value: str):
 
 def db_get_all_users():
     conn = get_db()
-    rows = conn.execute("SELECT * FROM users").fetchall()
+    rows = conn.execute("SELECT * FROM users ORDER BY id DESC").fetchall()
     conn.close()
     return rows
 
@@ -1073,8 +1119,12 @@ def db_stats():
         "SELECT COUNT(*) FROM orders WHERE date(created_at)=date('now')"
     ).fetchone()[0]
     products_count = conn.execute("SELECT COUNT(*) FROM products WHERE is_active=1").fetchone()[0]
+    banned_count = conn.execute("SELECT COUNT(*) FROM users WHERE is_banned=1").fetchone()[0]
+    new_users_week = conn.execute(
+        "SELECT COUNT(*) FROM users WHERE created_at >= datetime('now', '-7 days')"
+    ).fetchone()[0]
     conn.close()
-    return users_count, orders_count, revenue, pending_count, today_orders, products_count
+    return users_count, orders_count, revenue, pending_count, today_orders, products_count, banned_count, new_users_week
 
 
 # ─────────────────────────────────────────────
@@ -1098,16 +1148,12 @@ class CheckoutState(StatesGroup):
     confirm = State()
 
 
-class AdminAddProduct(StatesGroup):
-    category = State()
-    name = State()
-    description = State()
-    price = State()
-    old_price = State()
-    photos = State()
-    sizes = State()
-    colors = State()
-    stock = State()
+# ── Быстрое добавление товара (один блок текста) ──
+class AdminQuickAddProduct(StatesGroup):
+    category = State()      # выбор категории кнопкой
+    text_data = State()     # весь текст одним сообщением
+    photos = State()        # фото
+    stock = State()         # остатки
 
 
 class AdminEditProduct(StatesGroup):
@@ -1148,6 +1194,16 @@ class AdminMaintenance(StatesGroup):
     broadcast_confirm = State()
 
 
+class AdminPasswordState(StatesGroup):
+    waiting = State()
+
+
+class AdminUserAction(StatesGroup):
+    waiting_note = State()
+    waiting_search = State()
+    waiting_message = State()
+
+
 # ─────────────────────────────────────────────
 # KEYBOARDS
 # ─────────────────────────────────────────────
@@ -1178,23 +1234,31 @@ def kb_categories(categories, lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def kb_product_list(products, lang: str, cat_id: int) -> InlineKeyboardMarkup:
-    rows = []
-    for p in products:
-        price_text = f"{p['price']:.0f} ₽"
-        rows.append([InlineKeyboardButton(
-            text=f"{p['name']} — {price_text}",
-            callback_data=f"prod_view:{p['id']}:{cat_id}"
-        )])
-    rows.append([InlineKeyboardButton(text=t("back", lang), callback_data="catalog_back")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+# ── Листалка товаров: карточка товара с навигацией ──
+def kb_product_browse(product_id: int, cat_id: int, index: int, total: int, lang: str) -> InlineKeyboardMarkup:
+    """Клавиатура для листалки: стрелки + корзина + назад к категориям."""
+    nav_row = []
+    if index > 0:
+        nav_row.append(InlineKeyboardButton(
+            text="◀️",
+            callback_data=f"browse:{cat_id}:{index - 1}"
+        ))
+    nav_row.append(InlineKeyboardButton(
+        text=f"{index + 1} / {total}",
+        callback_data="noop"
+    ))
+    if index < total - 1:
+        nav_row.append(InlineKeyboardButton(
+            text="▶️",
+            callback_data=f"browse:{cat_id}:{index + 1}"
+        ))
 
-
-def kb_product_card(product_id: int, cat_id: int, lang: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
+    rows = [
+        nav_row,
         [InlineKeyboardButton(text=t("add_to_cart", lang), callback_data=f"buy:{product_id}:{cat_id}")],
-        [InlineKeyboardButton(text=t("back_to_catalog", lang), callback_data=f"cat_open:{cat_id}")],
-    ])
+        [InlineKeyboardButton(text=t("back_to_catalog", lang), callback_data="catalog_back")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def kb_sizes(sizes: list, product_id: int, cat_id: int) -> InlineKeyboardMarkup:
@@ -1308,7 +1372,7 @@ def kb_admin_products(products) -> InlineKeyboardMarkup:
             text=f"{status} {cat}{p['name']} — {p['price']:.0f} ₽",
             callback_data=f"adm_prod:{p['id']}"
         )])
-    rows.append([InlineKeyboardButton(text="➕ Добавить товар", callback_data="adm_add_product")])
+    rows.append([InlineKeyboardButton(text="➕ Быстро добавить товар", callback_data="adm_quick_add")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1432,6 +1496,26 @@ def kb_maintenance_actions(is_on: bool) -> InlineKeyboardMarkup:
         ])
 
 
+def kb_admin_user_actions(tg_id: int, is_banned: int) -> InlineKeyboardMarkup:
+    ban_text = "✅ Разбанить" if is_banned else "🚫 Забанить"
+    ban_cb = f"adm_unban:{tg_id}" if is_banned else f"adm_ban:{tg_id}"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=ban_text, callback_data=ban_cb)],
+        [InlineKeyboardButton(text="✉️ Написать пользователю", callback_data=f"adm_msg_user:{tg_id}")],
+        [InlineKeyboardButton(text="📝 Добавить заметку", callback_data=f"adm_note:{tg_id}")],
+        [InlineKeyboardButton(text="📦 Заказы пользователя", callback_data=f"adm_user_orders:{tg_id}")],
+        [InlineKeyboardButton(text="⬅️ Назад к клиентам", callback_data="adm_back_clients")],
+    ])
+
+
+def kb_admin_clients_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👥 Все клиенты", callback_data="adm_clients_list:0")],
+        [InlineKeyboardButton(text="🚫 Забаненные", callback_data="adm_clients_banned")],
+        [InlineKeyboardButton(text="🔍 Поиск по username / ID", callback_data="adm_clients_search")],
+    ])
+
+
 # ─────────────────────────────────────────────
 # HELPER FUNCTIONS
 # ─────────────────────────────────────────────
@@ -1499,6 +1583,44 @@ def build_maintenance_text(lang: str) -> str:
     return t("maintenance", lang, time_info=time_info)
 
 
+def build_product_caption(product) -> str:
+    """Формирует текст карточки товара."""
+    photos = json.loads(product["photos"])
+    sizes = json.loads(product["sizes"])
+    colors = json.loads(product["colors"])
+
+    old_price_line = ""
+    if product["old_price"] and product["old_price"] > 0:
+        old_price_line = f"\n<s>{product['old_price']:.0f} ₽</s>"
+
+    caption = (
+        f"<b>{product['name']}</b>\n\n"
+        f"{product['description'] or ''}"
+        f"{old_price_line}\n"
+        f"💰 <b>{product['price']:.0f} ₽</b>\n\n"
+        f"📐 Размеры: {', '.join(sizes)}\n"
+        f"🎨 Цвета: {', '.join(colors)}"
+    )
+    return caption
+
+
+async def send_product_card(message_or_call, product, cat_id: int, index: int, total: int, lang: str):
+    """Отправляет карточку товара с навигацией (новым сообщением)."""
+    photos = json.loads(product["photos"])
+    caption = build_product_caption(product)
+    kb = kb_product_browse(product["id"], cat_id, index, total, lang)
+
+    first_photo = photos[0] if photos else None
+    if first_photo:
+        await message_or_call.answer_photo(
+            photo=first_photo,
+            caption=caption,
+            reply_markup=kb
+        )
+    else:
+        await message_or_call.answer(caption, reply_markup=kb)
+
+
 # ─────────────────────────────────────────────
 # BOT SETUP
 # ─────────────────────────────────────────────
@@ -1520,6 +1642,12 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     tg_id = message.from_user.id
 
+    # Проверка бана
+    if not is_admin(tg_id) and db_is_banned(tg_id):
+        lang = db_get_lang(tg_id) or "ru"
+        await message.answer(t("banned_message", lang))
+        return
+
     # Admins bypass maintenance
     if not is_admin(tg_id) and db_is_maintenance():
         lang = db_get_lang(tg_id) or "ru"
@@ -1540,9 +1668,8 @@ async def cmd_start(message: Message, state: FSMContext):
     )
 
     if not user or not user["lang"]:
-        # Новый пользователь — показываем приветствие с фото и выбором языка
         await state.set_state(LangState.choosing)
-        welcome_text = T["welcome_img"].get("ru")  # по умолчанию ru для нового
+        welcome_text = T["welcome_img"].get("ru")
         if os.path.exists(LOGO_PATH):
             photo = FSInputFile(LOGO_PATH)
             await message.answer_photo(
@@ -1579,18 +1706,6 @@ async def cb_lang_chosen(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-# ──────────────────────────────────────────────────────────────
-# ВАЖНО: распознавание кнопок главного меню
-#
-# Раньше использовалось 4 отдельных хендлера F.text.in_(SET),
-# зарегистрированных в РАЗНОМ порядке относительно других хендлеров.
-# Здесь это сведено в ОДИН надёжный хендлер с StateFilter(None),
-# чтобы он не перехватывал текст, когда пользователь находится
-# в любом FSM-состоянии (checkout, admin-формы и т.д.), и чтобы
-# не было риска, что какой-то другой "общий" хендлер выше по файлу
-# перехватит сообщение раньше.
-# ──────────────────────────────────────────────────────────────
-
 def _collect_translations(key: str) -> set:
     result = set()
     for value in T.get(key, {}).values():
@@ -1609,13 +1724,14 @@ ALL_MENU_TEXTS = CATALOG_TEXTS | CART_TEXTS | MY_ORDERS_TEXTS | SETTINGS_TEXTS
 
 @router.message(StateFilter(None), F.text.in_(ALL_MENU_TEXTS))
 async def handle_main_menu_buttons(message: Message, state: FSMContext):
-    if is_admin(message.from_user.id):
-        # У админа свои текстовые кнопки (см. ниже), но если совпал текст
-        # пользовательского меню — всё равно обработаем как обычный юзер,
-        # чтобы админ тоже мог пользоваться магазином через /start.
-        pass
-
     tg_id = message.from_user.id
+
+    # Проверка бана
+    if not is_admin(tg_id) and db_is_banned(tg_id):
+        lang = db_get_lang(tg_id) or "ru"
+        await message.answer(t("banned_message", lang))
+        return
+
     lang = db_get_lang(tg_id)
     text = message.text
 
@@ -1679,16 +1795,31 @@ async def cb_catalog_back(call: CallbackQuery):
     lang = db_get_lang(call.from_user.id)
     categories = db_get_active_categories()
     if not categories:
-        await call.message.edit_text(t("no_categories", lang))
+        try:
+            await call.message.edit_text(t("no_categories", lang))
+        except Exception:
+            await call.message.answer(t("no_categories", lang))
         await call.answer()
         return
-    await call.message.edit_text(
-        t("choose_category", lang),
-        reply_markup=kb_categories(categories, lang)
-    )
+    try:
+        await call.message.edit_text(
+            t("choose_category", lang),
+            reply_markup=kb_categories(categories, lang)
+        )
+    except Exception:
+        # Если предыдущее сообщение было с фото — удаляем и отправляем новое
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+        await call.message.answer(
+            t("choose_category", lang),
+            reply_markup=kb_categories(categories, lang)
+        )
     await call.answer()
 
 
+# ── ОТКРЫТИЕ КАТЕГОРИИ — сразу показываем первый товар ──
 @router.callback_query(F.data.startswith("cat_open:"))
 async def cb_cat_open(call: CallbackQuery):
     cat_id = int(call.data.split(":")[1])
@@ -1700,68 +1831,84 @@ async def cb_cat_open(call: CallbackQuery):
 
     products = db_get_products_by_category(cat_id)
     if not products:
-        await call.message.edit_text(
-            f"{category['emoji']} <b>{category['name']}</b>\n\n{t('catalog_empty', lang)}",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=t("back", lang), callback_data="catalog_back")]
-            ])
-        )
+        try:
+            await call.message.edit_text(
+                f"{category['emoji']} <b>{category['name']}</b>\n\n{t('catalog_empty', lang)}",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text=t("back", lang), callback_data="catalog_back")]
+                ])
+            )
+        except Exception:
+            try:
+                await call.message.delete()
+            except Exception:
+                pass
+            await call.message.answer(
+                f"{category['emoji']} <b>{category['name']}</b>\n\n{t('catalog_empty', lang)}",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text=t("back", lang), callback_data="catalog_back")]
+                ])
+            )
         await call.answer()
         return
 
-    text = f"{category['emoji']} <b>{category['name']}</b>\n\nВыберите товар:"
-    await call.message.edit_text(
-        text,
-        reply_markup=kb_product_list(products, lang, cat_id)
-    )
-    await call.answer()
-
-
-@router.callback_query(F.data.startswith("prod_view:"))
-async def cb_prod_view(call: CallbackQuery):
-    parts = call.data.split(":")
-    product_id = int(parts[1])
-    cat_id = int(parts[2])
-    lang = db_get_lang(call.from_user.id)
-
-    product = db_get_product(product_id)
-    if not product:
-        await call.answer("Товар не найден")
-        return
-
-    photos = json.loads(product["photos"])
-    sizes = json.loads(product["sizes"])
-    colors = json.loads(product["colors"])
-
-    old_price_line = ""
-    if product["old_price"] and product["old_price"] > 0:
-        old_price_line = f"\n<s>{product['old_price']:.0f} ₽</s>"
-
-    caption = (
-        f"<b>{product['name']}</b>\n\n"
-        f"{product['description'] or ''}"
-        f"{old_price_line}\n"
-        f"💰 <b>{product['price']:.0f} ₽</b>\n\n"
-        f"📐 Размеры: {', '.join(sizes)}\n"
-        f"🎨 Цвета: {', '.join(colors)}"
-    )
-
-    kb = kb_product_card(product_id, cat_id, lang)
-
+    # Удаляем предыдущее сообщение и показываем первый товар
     try:
         await call.message.delete()
     except Exception:
         pass
 
+    await send_product_card(call.message, products[0], cat_id, 0, len(products), lang)
+    await call.answer()
+
+
+# ── ЛИСТАЛКА: переход к товару по индексу ──
+@router.callback_query(F.data.startswith("browse:"))
+async def cb_browse(call: CallbackQuery):
+    parts = call.data.split(":")
+    cat_id = int(parts[1])
+    index = int(parts[2])
+    lang = db_get_lang(call.from_user.id)
+
+    products = db_get_products_by_category(cat_id)
+    if not products or index >= len(products) or index < 0:
+        await call.answer("Товар не найден")
+        return
+
+    product = products[index]
+    photos = json.loads(product["photos"])
+    caption = build_product_caption(product)
+    kb = kb_product_browse(product["id"], cat_id, index, len(products), lang)
+
     first_photo = photos[0] if photos else None
+
+    # Пытаемся отредактировать медиа, если фото есть
     if first_photo:
-        await call.message.answer_photo(
-            photo=first_photo,
-            caption=caption,
-            reply_markup=kb
-        )
+        try:
+            await call.message.edit_media(
+                media=InputMediaPhoto(media=first_photo, caption=caption),
+                reply_markup=kb
+            )
+        except Exception:
+            # Если не получается — удаляем и отправляем новое
+            try:
+                await call.message.delete()
+            except Exception:
+                pass
+            await call.message.answer_photo(
+                photo=first_photo,
+                caption=caption,
+                reply_markup=kb
+            )
     else:
-        await call.message.answer(caption, reply_markup=kb)
+        try:
+            await call.message.edit_text(caption, reply_markup=kb)
+        except Exception:
+            try:
+                await call.message.delete()
+            except Exception:
+                pass
+            await call.message.answer(caption, reply_markup=kb)
 
     await call.answer()
 
@@ -1830,9 +1977,11 @@ async def cb_select_color(call: CallbackQuery, state: FSMContext):
 
     db_add_to_cart(tg_id, product_id, size, color)
     await state.clear()
+    data_state = await state.get_data()
+    cat_id_for_back = data_state.get("cat_id", cat_id)
     await call.message.answer(
         t("added_to_cart", lang),
-        reply_markup=kb_after_add_to_cart(cat_id, lang)
+        reply_markup=kb_after_add_to_cart(cat_id_for_back, lang)
     )
     await call.answer()
 
@@ -2213,7 +2362,7 @@ async def cb_change_lang(call: CallbackQuery, state: FSMContext):
 
 
 # ─────────────────────────────────────────────
-# ADMIN HANDLERS
+# ADMIN: ПАРОЛЬ НА ВХОД
 # ─────────────────────────────────────────────
 
 @router.message(Command("admin"))
@@ -2221,14 +2370,32 @@ async def cmd_admin(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     await state.clear()
-    is_maint = db_is_maintenance()
-    maint_status = "🔴 Закрыт (тех. перерыв)" if is_maint else "🟢 Открыт"
+    await state.set_state(AdminPasswordState.waiting)
     await message.answer(
-        f"🛡 <b>Панель администратора {SHOP_NAME}</b>\n\n"
-        f"Статус магазина: {maint_status}\n\n"
-        f"Выберите раздел:",
-        reply_markup=kb_admin_main()
+        "🔐 <b>Введите пароль для входа в панель администратора:</b>",
+        reply_markup=ReplyKeyboardRemove()
     )
+
+
+@router.message(AdminPasswordState.waiting)
+async def admin_password_check(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        return
+
+    if message.text.strip() == ADMIN_PASSWORD:
+        await state.clear()
+        is_maint = db_is_maintenance()
+        maint_status = "🔴 Закрыт (тех. перерыв)" if is_maint else "🟢 Открыт"
+        await message.answer(
+            f"✅ <b>Добро пожаловать в панель администратора {SHOP_NAME}!</b>\n\n"
+            f"Статус магазина: {maint_status}\n\n"
+            f"Выберите раздел:",
+            reply_markup=kb_admin_main()
+        )
+    else:
+        await state.clear()
+        await message.answer("❌ <b>Неверный пароль.</b> Доступ запрещён.")
 
 
 @router.message(StateFilter(None), F.text == "🏠 Выход из панели")
@@ -2240,7 +2407,9 @@ async def admin_exit(message: Message, state: FSMContext):
     await message.answer(t("main_menu", lang), reply_markup=kb_main_menu(lang))
 
 
-# ─────── ADMIN: MAINTENANCE ───────
+# ─────────────────────────────────────────────
+# ADMIN: MAINTENANCE
+# ─────────────────────────────────────────────
 
 @router.message(StateFilter(None), F.text == "🔧 Тех. перерыв")
 async def admin_maintenance(message: Message, state: FSMContext):
@@ -2289,8 +2458,6 @@ async def adm_maintenance_time(message: Message, state: FSMContext):
         f"Пользователи будут видеть сообщение о перерыве при попытке запустить бот.",
         reply_markup=kb_admin_main()
     )
-
-    # Предложить рассылку
     await message.answer(
         "Хотите разослать уведомление о тех. перерыве всем пользователям?",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -2427,7 +2594,9 @@ async def cb_maint_bc_confirm(call: CallbackQuery):
     )
 
 
-# ─────── ADMIN: CATEGORIES ───────
+# ─────────────────────────────────────────────
+# ADMIN: CATEGORIES
+# ─────────────────────────────────────────────
 
 @router.message(StateFilter(None), F.text == "🗂 Категории")
 async def admin_categories(message: Message, state: FSMContext):
@@ -2498,8 +2667,7 @@ async def adm_cat_name(message: Message, state: FSMContext):
     await state.update_data(name=message.text.strip())
     await state.set_state(AdminAddCategory.emoji)
     await message.answer(
-        "Введите <b>эмодзи</b> для категории (например: 👗 👔 👟 👜 🧥):\n\n"
-        "Просто отправьте один эмодзи:"
+        "Введите <b>эмодзи</b> для категории (например: 👗 👔 👟 👜 🧥):\n\nПросто отправьте один эмодзи:"
     )
 
 
@@ -2508,8 +2676,7 @@ async def adm_cat_emoji(message: Message, state: FSMContext):
     await state.update_data(emoji=message.text.strip())
     await state.set_state(AdminAddCategory.sort_order)
     await message.answer(
-        "Введите <b>порядок отображения</b> (число, меньше = выше):\n"
-        "Например: 1, 2, 3..."
+        "Введите <b>порядок отображения</b> (число, меньше = выше):\nНапример: 1, 2, 3..."
     )
 
 
@@ -2625,7 +2792,9 @@ async def adm_cat_edit_value(message: Message, state: FSMContext):
     await message.answer("✅ Категория обновлена.", reply_markup=kb_admin_main())
 
 
-# ─────── ADMIN: PRODUCTS ───────
+# ─────────────────────────────────────────────
+# ADMIN: PRODUCTS (список)
+# ─────────────────────────────────────────────
 
 @router.message(StateFilter(None), F.text == "🛍 Товары")
 async def admin_products(message: Message, state: FSMContext):
@@ -2717,86 +2886,189 @@ async def cb_adm_delete_product(call: CallbackQuery):
     await call.answer()
 
 
-@router.callback_query(F.data == "adm_add_product")
-async def cb_adm_add_product(call: CallbackQuery, state: FSMContext):
+# ─────────────────────────────────────────────
+# ADMIN: БЫСТРОЕ ДОБАВЛЕНИЕ ТОВАРА
+# Формат одного сообщения:
+#   Название
+#   Описание (может быть несколько строк)
+#   ---
+#   цена: 4999
+#   старая цена: 5999  (необязательно)
+#   размеры: S, M, L, XL
+#   цвета: Чёрный, Белый
+# ─────────────────────────────────────────────
+
+QUICK_ADD_HELP = (
+    "➕ <b>Быстрое добавление товара</b>\n\n"
+    "Отправьте одним сообщением данные в формате:\n\n"
+    "<code>Название товара\n"
+    "Описание товара (любое количество строк)\n"
+    "---\n"
+    "цена: 4999\n"
+    "старая цена: 5999\n"
+    "размеры: S, M, L, XL\n"
+    "цвета: Чёрный, Белый</code>\n\n"
+    "<b>Обязательны:</b> название, цена, размеры, цвета\n"
+    "<b>Необязательно:</b> описание, старая цена\n\n"
+    "Разделитель <code>---</code> отделяет описание от параметров."
+)
+
+
+def parse_quick_product(text: str) -> dict | None:
+    """Парсит быстрый формат добавления товара. Возвращает dict или None при ошибке."""
+    result = {}
+    errors = []
+
+    if "---" in text:
+        parts = text.split("---", 1)
+        header = parts[0].strip()
+        params_block = parts[1].strip()
+    else:
+        # Нет разделителя — пробуем найти параметры по ключевым словам
+        lines = text.strip().splitlines()
+        header_lines = []
+        params_lines = []
+        param_keys = ("цена:", "старая цена:", "размеры:", "цвета:", "price:", "sizes:", "colors:")
+        in_params = False
+        for line in lines:
+            if any(line.lower().startswith(k) for k in param_keys):
+                in_params = True
+            if in_params:
+                params_lines.append(line)
+            else:
+                header_lines.append(line)
+        header = "\n".join(header_lines).strip()
+        params_block = "\n".join(params_lines).strip()
+
+    # Разбираем заголовок: первая строка — название, остальные — описание
+    header_lines = header.splitlines()
+    if not header_lines:
+        return None
+    result["name"] = header_lines[0].strip()
+    result["description"] = "\n".join(header_lines[1:]).strip() if len(header_lines) > 1 else ""
+
+    # Разбираем параметры
+    params = {}
+    for line in params_block.splitlines():
+        if ":" in line:
+            key, _, val = line.partition(":")
+            params[key.strip().lower()] = val.strip()
+
+    # Цена
+    price_raw = params.get("цена") or params.get("price") or params.get("цена (₽)")
+    if not price_raw:
+        errors.append("❌ Не указана цена (цена: 4999)")
+    else:
+        try:
+            result["price"] = float(price_raw.replace(",", ".").replace("₽", "").strip())
+        except ValueError:
+            errors.append(f"❌ Неверный формат цены: {price_raw}")
+
+    # Старая цена (необязательно)
+    old_raw = params.get("старая цена") or params.get("old price") or params.get("старая цена (₽)")
+    if old_raw:
+        try:
+            v = float(old_raw.replace(",", ".").replace("₽", "").strip())
+            result["old_price"] = v if v > 0 else None
+        except ValueError:
+            result["old_price"] = None
+    else:
+        result["old_price"] = None
+
+    # Размеры
+    sizes_raw = params.get("размеры") or params.get("sizes")
+    if not sizes_raw:
+        errors.append("❌ Не указаны размеры (размеры: S, M, L)")
+    else:
+        result["sizes"] = [s.strip() for s in sizes_raw.split(",") if s.strip()]
+        if not result["sizes"]:
+            errors.append("❌ Размеры пусты")
+
+    # Цвета
+    colors_raw = params.get("цвета") or params.get("colors")
+    if not colors_raw:
+        errors.append("❌ Не указаны цвета (цвета: Чёрный, Белый)")
+    else:
+        result["colors"] = [c.strip() for c in colors_raw.split(",") if c.strip()]
+        if not result["colors"]:
+            errors.append("❌ Цвета пусты")
+
+    if errors:
+        result["errors"] = errors
+
+    return result
+
+
+@router.callback_query(F.data == "adm_quick_add")
+async def cb_adm_quick_add(call: CallbackQuery, state: FSMContext):
     if not is_admin(call.from_user.id):
         return
     categories = db_get_all_categories()
     if not categories:
         await call.message.answer(
-            "⚠️ Сначала создайте хотя бы одну категорию!\n\n"
-            "Нажмите кнопку <b>🗂 Категории</b> в меню."
+            "⚠️ Сначала создайте хотя бы одну категорию!\n\nНажмите кнопку <b>🗂 Категории</b> в меню."
         )
         await call.answer()
         return
-    await state.set_state(AdminAddProduct.category)
+    await state.set_state(AdminQuickAddProduct.category)
     await state.update_data(photos=[])
     await call.message.answer(
-        "➕ <b>Добавление товара</b>\n\n<b>Шаг 1.</b> Выберите категорию:",
+        "➕ <b>Быстрое добавление товара</b>\n\n<b>Шаг 1.</b> Выберите категорию:",
         reply_markup=kb_select_category_for_product(categories)
     )
     await call.answer()
 
 
-@router.callback_query(AdminAddProduct.category, F.data.startswith("adm_prod_cat:"))
-async def adm_product_cat_chosen(call: CallbackQuery, state: FSMContext):
+@router.callback_query(AdminQuickAddProduct.category, F.data.startswith("adm_prod_cat:"))
+async def adm_quick_cat_chosen(call: CallbackQuery, state: FSMContext):
     cat_id_str = call.data.split(":")[1]
     cat_id = int(cat_id_str) if cat_id_str != "0" else None
     await state.update_data(category_id=cat_id)
-    await state.set_state(AdminAddProduct.name)
+    await state.set_state(AdminQuickAddProduct.text_data)
     await call.message.answer(
-        "<b>Шаг 2.</b> Введите <b>название</b> товара:",
+        QUICK_ADD_HELP + "\n\n<b>Отправьте данные товара одним сообщением:</b>",
         reply_markup=ReplyKeyboardRemove()
     )
     await call.answer()
 
 
-@router.message(AdminAddProduct.name)
-async def adm_product_name(message: Message, state: FSMContext):
-    await state.update_data(name=message.text.strip())
-    await state.set_state(AdminAddProduct.description)
-    await message.answer("<b>Шаг 3.</b> Введите <b>описание</b> товара:")
+@router.message(AdminQuickAddProduct.text_data)
+async def adm_quick_text(message: Message, state: FSMContext):
+    parsed = parse_quick_product(message.text)
 
-
-@router.message(AdminAddProduct.description)
-async def adm_product_description(message: Message, state: FSMContext):
-    await state.update_data(description=message.text.strip())
-    await state.set_state(AdminAddProduct.price)
-    await message.answer("<b>Шаг 4.</b> Введите <b>цену</b> (например: 4999):")
-
-
-@router.message(AdminAddProduct.price)
-async def adm_product_price(message: Message, state: FSMContext):
-    try:
-        price = float(message.text.strip().replace(",", "."))
-    except ValueError:
-        await message.answer("⚠️ Неверный формат. Введите число (например: 4999):")
+    if not parsed:
+        await message.answer("⚠️ Не удалось распознать данные. Проверьте формат и попробуйте снова.\n\n" + QUICK_ADD_HELP)
         return
-    await state.update_data(price=price)
-    await state.set_state(AdminAddProduct.old_price)
-    await message.answer(
-        "<b>Шаг 5.</b> Введите <b>старую цену</b> (для зачёркнутой скидки).\n"
-        "Или отправьте <b>0</b> чтобы пропустить:"
-    )
 
-
-@router.message(AdminAddProduct.old_price)
-async def adm_product_old_price(message: Message, state: FSMContext):
-    try:
-        old_price = float(message.text.strip().replace(",", "."))
-    except ValueError:
-        await message.answer("⚠️ Неверный формат. Введите число или 0:")
+    if "errors" in parsed:
+        errors_text = "\n".join(parsed["errors"])
+        await message.answer(
+            f"⚠️ <b>Ошибки в данных:</b>\n{errors_text}\n\nИсправьте и отправьте снова.\n\n" + QUICK_ADD_HELP
+        )
         return
-    await state.update_data(old_price=old_price if old_price > 0 else None)
-    await state.set_state(AdminAddProduct.photos)
-    await message.answer(
-        "<b>Шаг 6.</b> Отправьте <b>фотографии</b> товара (до 10 штук).\n\n"
-        "Когда загрузите все фото — отправьте команду /done"
+
+    await state.update_data(parsed=parsed)
+
+    # Предпросмотр
+    sizes_str = ", ".join(parsed["sizes"])
+    colors_str = ", ".join(parsed["colors"])
+    old_price_line = f"\n🏷 Старая цена: {parsed['old_price']:.0f} ₽" if parsed.get("old_price") else ""
+    preview = (
+        f"✅ <b>Данные распознаны!</b>\n\n"
+        f"📝 Название: <b>{parsed['name']}</b>\n"
+        f"📄 Описание: {parsed['description'] or '—'}\n"
+        f"💰 Цена: <b>{parsed['price']:.0f} ₽</b>{old_price_line}\n"
+        f"📐 Размеры: {sizes_str}\n"
+        f"🎨 Цвета: {colors_str}\n\n"
+        f"<b>Шаг 2.</b> Теперь отправьте <b>фотографии</b> товара (до 10 штук).\n"
+        f"Когда загрузите все — отправьте /done"
     )
+    await message.answer(preview)
+    await state.set_state(AdminQuickAddProduct.photos)
 
 
-@router.message(AdminAddProduct.photos, F.photo)
-async def adm_product_photo(message: Message, state: FSMContext):
+@router.message(AdminQuickAddProduct.photos, F.photo)
+async def adm_quick_photo(message: Message, state: FSMContext):
     data = await state.get_data()
     photos = data.get("photos", [])
     if len(photos) >= 10:
@@ -2808,69 +3080,34 @@ async def adm_product_photo(message: Message, state: FSMContext):
     await message.answer(f"✅ Фото {len(photos)}/10 принято. Ещё или /done")
 
 
-@router.message(AdminAddProduct.photos, Command("done"))
-async def adm_product_photos_done(message: Message, state: FSMContext):
+@router.message(AdminQuickAddProduct.photos, Command("done"))
+async def adm_quick_photos_done(message: Message, state: FSMContext):
     data = await state.get_data()
-    if "product_id" in data:
-        product_id = data["product_id"]
-        photos = data.get("photos", [])
-        db_update_product_field(product_id, "photos", photos)
-        await state.clear()
-        await message.answer(
-            f"✅ Фото обновлены ({len(photos)} шт.).",
-            reply_markup=kb_admin_main()
-        )
-    else:
-        photos = data.get("photos", [])
-        if not photos:
-            await message.answer("⚠️ Добавьте хотя бы одно фото!")
-            return
-        await state.set_state(AdminAddProduct.sizes)
-        await message.answer(
-            "<b>Шаг 7.</b> Введите <b>размеры</b> через запятую:\n\n"
-            "<i>Примеры: XS, S, M, L, XL, XXL\nили: 36, 38, 40, 42, 44\nили: One Size</i>"
-        )
-
-
-@router.message(AdminAddProduct.sizes)
-async def adm_product_sizes(message: Message, state: FSMContext):
-    sizes = [s.strip() for s in message.text.split(",") if s.strip()]
-    if not sizes:
-        await message.answer("⚠️ Введите хотя бы один размер:")
+    photos = data.get("photos", [])
+    if not photos:
+        await message.answer("⚠️ Добавьте хотя бы одно фото!")
         return
-    await state.update_data(sizes=sizes)
-    await state.set_state(AdminAddProduct.colors)
+
+    parsed = data["parsed"]
+    sizes = parsed["sizes"]
+    colors = parsed["colors"]
+
+    example_lines = "\n".join(f"{s},{c},10" for s in sizes for c in colors)
+    await state.set_state(AdminQuickAddProduct.stock)
     await message.answer(
-        "<b>Шаг 8.</b> Введите <b>цвета</b> через запятую:\n\n"
-        "<i>Примеры: Чёрный, Белый, Серый\nили: Black, White, Red</i>"
-    )
-
-
-@router.message(AdminAddProduct.colors)
-async def adm_product_colors(message: Message, state: FSMContext):
-    colors = [c.strip() for c in message.text.split(",") if c.strip()]
-    if not colors:
-        await message.answer("⚠️ Введите хотя бы один цвет:")
-        return
-    await state.update_data(colors=colors)
-    await state.set_state(AdminAddProduct.stock)
-    data = await state.get_data()
-    sizes = data["sizes"]
-
-    example_lines = "\n".join(
-        f"{s},{c},10" for s in sizes for c in colors
-    )
-    await message.answer(
-        "<b>Шаг 9.</b> Введите <b>остатки на складе</b>.\n\n"
-        "Формат: <code>размер,цвет,количество</code> (по одной комбинации на строку)\n\n"
+        f"<b>Шаг 3.</b> Введите <b>остатки на складе</b>.\n\n"
+        f"Формат: <code>размер,цвет,количество</code> — по одному на строку\n\n"
         f"Готовый шаблон:\n<code>{example_lines}</code>\n\n"
-        "Скопируйте, измените количество и отправьте:"
+        f"Скопируйте, измените количество и отправьте:"
     )
 
 
-@router.message(AdminAddProduct.stock)
-async def adm_product_stock(message: Message, state: FSMContext):
+@router.message(AdminQuickAddProduct.stock)
+async def adm_quick_stock(message: Message, state: FSMContext):
     data = await state.get_data()
+    parsed = data["parsed"]
+    photos = data.get("photos", [])
+
     stock_data = []
     errors = []
     for line in message.text.strip().splitlines():
@@ -2893,13 +3130,13 @@ async def adm_product_stock(message: Message, state: FSMContext):
 
     cat_id = data.get("category_id")
     product_id = db_add_product(
-        name=data["name"],
-        description=data["description"],
-        price=data["price"],
-        old_price=data.get("old_price"),
-        photos=data.get("photos", []),
-        sizes=data["sizes"],
-        colors=data["colors"],
+        name=parsed["name"],
+        description=parsed["description"],
+        price=parsed["price"],
+        old_price=parsed.get("old_price"),
+        photos=photos,
+        sizes=parsed["sizes"],
+        colors=parsed["colors"],
         category_id=cat_id
     )
 
@@ -2915,11 +3152,11 @@ async def adm_product_stock(message: Message, state: FSMContext):
             cat_str = f"{cat['emoji']} {cat['name']}"
 
     await message.answer(
-        f"✅ <b>Товар добавлен!</b>\n\n"
-        f"📝 Название: {data['name']}\n"
+        f"🎉 <b>Товар успешно добавлен!</b>\n\n"
+        f"📝 {parsed['name']}\n"
         f"🗂 Категория: {cat_str}\n"
-        f"💰 Цена: {data['price']:.2f} ₽\n"
-        f"🖼 Фото: {len(data.get('photos', []))} шт.\n"
+        f"💰 Цена: {parsed['price']:.0f} ₽\n"
+        f"🖼 Фото: {len(photos)} шт.\n"
         f"📦 ID товара: {product_id}",
         reply_markup=kb_admin_main()
     )
@@ -2950,7 +3187,7 @@ async def cb_adm_edit_field(call: CallbackQuery, state: FSMContext):
 
     if field == "photos":
         await state.update_data(photos=[])
-        await state.set_state(AdminAddProduct.photos)
+        await state.set_state(AdminEditProduct.entering_photos)
         await call.message.answer(
             "Отправьте новые фотографии (до 10), затем /done:",
             reply_markup=ReplyKeyboardRemove()
@@ -2977,6 +3214,32 @@ async def cb_adm_edit_field(call: CallbackQuery, state: FSMContext):
             reply_markup=ReplyKeyboardRemove()
         )
     await call.answer()
+
+
+@router.message(AdminEditProduct.entering_photos, F.photo)
+async def adm_edit_photo(message: Message, state: FSMContext):
+    data = await state.get_data()
+    photos = data.get("photos", [])
+    if len(photos) >= 10:
+        await message.answer("⚠️ Максимум 10 фотографий. Отправьте /done")
+        return
+    file_id = message.photo[-1].file_id
+    photos.append(file_id)
+    await state.update_data(photos=photos)
+    await message.answer(f"✅ Фото {len(photos)}/10 принято. Ещё или /done")
+
+
+@router.message(AdminEditProduct.entering_photos, Command("done"))
+async def adm_edit_photos_done(message: Message, state: FSMContext):
+    data = await state.get_data()
+    product_id = data["product_id"]
+    photos = data.get("photos", [])
+    if not photos:
+        await message.answer("⚠️ Добавьте хотя бы одно фото!")
+        return
+    db_update_product_field(product_id, "photos", photos)
+    await state.clear()
+    await message.answer(f"✅ Фото обновлены ({len(photos)} шт.).", reply_markup=kb_admin_main())
 
 
 @router.callback_query(AdminEditProduct.entering_value, F.data.startswith("adm_prod_cat:"))
@@ -3294,7 +3557,9 @@ async def adm_promo_value(message: Message, state: FSMContext):
     )
 
 
-# ─────── ADMIN: CLIENTS ───────
+# ─────────────────────────────────────────────
+# ADMIN: РАСШИРЕННЫЙ РАЗДЕЛ КЛИЕНТОВ
+# ─────────────────────────────────────────────
 
 @router.message(StateFilter(None), F.text == "👥 Клиенты")
 async def admin_clients(message: Message, state: FSMContext):
@@ -3302,33 +3567,329 @@ async def admin_clients(message: Message, state: FSMContext):
         return
     await state.clear()
     users = db_get_all_users()
-    if not users:
-        await message.answer("👥 Пользователей пока нет.")
-        return
+    banned = sum(1 for u in users if u["is_banned"])
+    await message.answer(
+        f"👥 <b>Управление клиентами</b>\n\n"
+        f"Всего пользователей: <b>{len(users)}</b>\n"
+        f"Забаненных: <b>{banned}</b>",
+        reply_markup=kb_admin_clients_menu()
+    )
 
-    lines = [f"👥 <b>Клиенты</b> (всего: {len(users)})\n"]
-    for u in users:
+
+@router.callback_query(F.data == "adm_back_clients")
+async def cb_adm_back_clients(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    users = db_get_all_users()
+    banned = sum(1 for u in users if u["is_banned"])
+    await call.message.edit_text(
+        f"👥 <b>Управление клиентами</b>\n\n"
+        f"Всего пользователей: <b>{len(users)}</b>\n"
+        f"Забаненных: <b>{banned}</b>",
+        reply_markup=kb_admin_clients_menu()
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm_clients_list:"))
+async def cb_adm_clients_list(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    page = int(call.data.split(":")[1])
+    users = db_get_all_users()
+    page_size = 15
+    total_pages = max(1, (len(users) + page_size - 1) // page_size)
+    page = max(0, min(page, total_pages - 1))
+    slice_users = users[page * page_size: (page + 1) * page_size]
+
+    lines = [f"👥 <b>Клиенты</b> (стр. {page + 1}/{total_pages})\n"]
+    for u in slice_users:
         uname = f"@{u['username']}" if u["username"] else "—"
-        name = f"{u['first_name']} {u['last_name'] or ''}".strip()
-        lines.append(f"• {name} | {uname} | <code>{u['tg_id']}</code>")
+        name = f"{u['first_name']} {u['last_name'] or ''}".strip() or "—"
+        ban_icon = "🚫" if u["is_banned"] else ""
+        lines.append(f"{ban_icon} {name} | {uname} | <code>{u['tg_id']}</code>")
+
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton(text="◀️", callback_data=f"adm_clients_list:{page - 1}"))
+    if page < total_pages - 1:
+        nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"adm_clients_list:{page + 1}"))
+
+    # Кнопки для каждого юзера на странице
+    user_buttons = []
+    for u in slice_users:
+        name = f"{u['first_name']} {u['last_name'] or ''}".strip() or "—"
+        ban_icon = "🚫 " if u["is_banned"] else ""
+        user_buttons.append([InlineKeyboardButton(
+            text=f"{ban_icon}{name[:20]}",
+            callback_data=f"adm_user:{u['tg_id']}"
+        )])
+
+    kb_rows = user_buttons
+    if nav_buttons:
+        kb_rows.append(nav_buttons)
+    kb_rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="adm_back_clients")])
 
     text = "\n".join(lines)
-    if len(text) > 4000:
-        text = text[:3990] + "\n\n<i>...и другие</i>"
-    await message.answer(text)
+    try:
+        await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows))
+    except Exception:
+        await call.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows))
+    await call.answer()
 
 
-# ─────── ADMIN: BROADCAST ───────
+@router.callback_query(F.data == "adm_clients_banned")
+async def cb_adm_clients_banned(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    users = [u for u in db_get_all_users() if u["is_banned"]]
+    if not users:
+        await call.answer("Забаненных пользователей нет", show_alert=True)
+        return
+
+    lines = [f"🚫 <b>Забаненные пользователи</b> ({len(users)})\n"]
+    kb_rows = []
+    for u in users:
+        uname = f"@{u['username']}" if u["username"] else "—"
+        name = f"{u['first_name']} {u['last_name'] or ''}".strip() or "—"
+        lines.append(f"🚫 {name} | {uname} | <code>{u['tg_id']}</code>")
+        kb_rows.append([InlineKeyboardButton(
+            text=f"✅ Разбанить {name[:15]}",
+            callback_data=f"adm_unban:{u['tg_id']}"
+        )])
+
+    kb_rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="adm_back_clients")])
+    await call.message.edit_text(
+        "\n".join(lines),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == "adm_clients_search")
+async def cb_adm_clients_search(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        return
+    await state.set_state(AdminUserAction.waiting_search)
+    await call.message.answer(
+        "🔍 Введите <b>username</b> (без @) или <b>Telegram ID</b> пользователя:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await call.answer()
+
+
+@router.message(AdminUserAction.waiting_search)
+async def adm_user_search(message: Message, state: FSMContext):
+    query = message.text.strip()
+    conn = get_db()
+
+    # Пробуем как ID
+    user = None
+    try:
+        tg_id = int(query)
+        user = conn.execute("SELECT * FROM users WHERE tg_id=?", (tg_id,)).fetchone()
+    except ValueError:
+        pass
+
+    # Пробуем как username
+    if not user:
+        user = conn.execute(
+            "SELECT * FROM users WHERE username=? COLLATE NOCASE", (query.lstrip("@"),)
+        ).fetchone()
+
+    conn.close()
+
+    if not user:
+        await state.clear()
+        await message.answer(
+            f"❌ Пользователь «{query}» не найден.",
+            reply_markup=kb_admin_main()
+        )
+        return
+
+    await state.clear()
+    await show_admin_user_card(message, user)
+
+
+async def show_admin_user_card(target, user):
+    """Показывает карточку пользователя с действиями."""
+    uname = f"@{user['username']}" if user["username"] else "—"
+    name = f"{user['first_name']} {user['last_name'] or ''}".strip() or "—"
+    ban_status = "🚫 Забанен" if user["is_banned"] else "✅ Активен"
+    note = user["note"] or "—" if "note" in user.keys() else "—"
+
+    # Считаем заказы
+    conn = get_db()
+    order_count = conn.execute("SELECT COUNT(*) FROM orders WHERE tg_id=?", (user["tg_id"],)).fetchone()[0]
+    total_spent = conn.execute(
+        "SELECT COALESCE(SUM(total),0) FROM orders WHERE tg_id=? AND status IN ('paid','confirmed')",
+        (user["tg_id"],)
+    ).fetchone()[0]
+    conn.close()
+
+    text = (
+        f"👤 <b>Профиль пользователя</b>\n\n"
+        f"Имя: {name}\n"
+        f"Username: {uname}\n"
+        f"Telegram ID: <code>{user['tg_id']}</code>\n"
+        f"Язык: {user['lang']}\n"
+        f"Статус: {ban_status}\n"
+        f"Заметка: {note}\n\n"
+        f"📦 Заказов: <b>{order_count}</b>\n"
+        f"💰 Потрачено: <b>{total_spent:.2f} ₽</b>\n"
+        f"📅 Зарегистрирован: {user['created_at'][:10]}"
+    )
+
+    if hasattr(target, "answer"):
+        await target.answer(text, reply_markup=kb_admin_user_actions(user["tg_id"], user["is_banned"]))
+    else:
+        await target.message.answer(text, reply_markup=kb_admin_user_actions(user["tg_id"], user["is_banned"]))
+
+
+@router.callback_query(F.data.startswith("adm_user:"))
+async def cb_adm_user(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    tg_id = int(call.data.split(":")[1])
+    user = db_get_user(tg_id)
+    if not user:
+        await call.answer("Пользователь не найден")
+        return
+    await call.answer()
+    await show_admin_user_card(call, user)
+
+
+@router.callback_query(F.data.startswith("adm_ban:"))
+async def cb_adm_ban(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    tg_id = int(call.data.split(":")[1])
+    db_ban_user(tg_id)
+    await call.answer("Пользователь забанен")
+    user = db_get_user(tg_id)
+    if user:
+        try:
+            lang = user["lang"] or "ru"
+            await bot.send_message(tg_id, t("banned_message", lang))
+        except Exception:
+            pass
+    await call.message.edit_reply_markup(
+        reply_markup=kb_admin_user_actions(tg_id, 1)
+    )
+
+
+@router.callback_query(F.data.startswith("adm_unban:"))
+async def cb_adm_unban(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    tg_id = int(call.data.split(":")[1])
+    db_unban_user(tg_id)
+    await call.answer("Пользователь разбанен")
+    try:
+        await call.message.edit_reply_markup(
+            reply_markup=kb_admin_user_actions(tg_id, 0)
+        )
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("adm_note:"))
+async def cb_adm_note(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        return
+    tg_id = int(call.data.split(":")[1])
+    await state.set_state(AdminUserAction.waiting_note)
+    await state.update_data(target_tg_id=tg_id)
+    await call.message.answer(
+        "📝 Введите заметку для пользователя (или отправьте «-» чтобы очистить):",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await call.answer()
+
+
+@router.message(AdminUserAction.waiting_note)
+async def adm_user_note_input(message: Message, state: FSMContext):
+    data = await state.get_data()
+    tg_id = data["target_tg_id"]
+    note = message.text.strip()
+    if note == "-":
+        note = ""
+    db_set_user_note(tg_id, note)
+    await state.clear()
+    await message.answer("✅ Заметка сохранена.", reply_markup=kb_admin_main())
+
+
+@router.callback_query(F.data.startswith("adm_msg_user:"))
+async def cb_adm_msg_user(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        return
+    tg_id = int(call.data.split(":")[1])
+    await state.set_state(AdminUserAction.waiting_message)
+    await state.update_data(target_tg_id=tg_id)
+    await call.message.answer(
+        "✉️ Введите сообщение, которое будет отправлено пользователю:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await call.answer()
+
+
+@router.message(AdminUserAction.waiting_message)
+async def adm_user_message_send(message: Message, state: FSMContext):
+    data = await state.get_data()
+    tg_id = data["target_tg_id"]
+    await state.clear()
+    try:
+        await bot.send_message(tg_id, f"📩 <b>Сообщение от администратора:</b>\n\n{message.text}")
+        await message.answer("✅ Сообщение отправлено.", reply_markup=kb_admin_main())
+    except Exception:
+        await message.answer("❌ Не удалось отправить сообщение (пользователь мог заблокировать бот).", reply_markup=kb_admin_main())
+
+
+@router.callback_query(F.data.startswith("adm_user_orders:"))
+async def cb_adm_user_orders(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    tg_id = int(call.data.split(":")[1])
+    orders = db_get_user_orders(tg_id)
+    user = db_get_user(tg_id)
+    name = f"{user['first_name']} {user['last_name'] or ''}".strip() if user else str(tg_id)
+
+    if not orders:
+        await call.answer("У пользователя нет заказов", show_alert=True)
+        return
+
+    status_map = {
+        "pending": "⏳", "paid": "💳", "confirmed": "✅", "rejected": "❌"
+    }
+    lines = [f"📦 <b>Заказы пользователя {name}</b>\n"]
+    for o in orders[:15]:
+        icon = status_map.get(o["status"], "❓")
+        items = json.loads(o["items"])
+        items_short = ", ".join(f"{i['name']} ×{i['quantity']}" for i in items[:2])
+        lines.append(
+            f"{icon} <b>#{o['id']}</b> — {o['total']:.0f} ₽\n"
+            f"   {items_short}\n"
+            f"   📅 {o['created_at'][:10]}"
+        )
+
+    await call.message.answer("\n".join(lines))
+    await call.answer()
+
+
+# ─────────────────────────────────────────────
+# ADMIN: BROADCAST
+# ─────────────────────────────────────────────
 
 @router.message(StateFilter(None), F.text == "📢 Рассылка")
 async def admin_broadcast_start(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     users = db_get_all_users()
+    active_users = [u for u in users if not u["is_banned"]]
     await state.set_state(AdminBroadcast.message)
     await message.answer(
         f"📢 <b>Рассылка</b>\n\n"
-        f"Получателей: {len(users)} чел.\n\n"
+        f"Получателей: {len(active_users)} чел. (активных)\n\n"
         f"Отправьте сообщение для рассылки (текст, фото с подписью или видео с подписью):",
         reply_markup=ReplyKeyboardRemove()
     )
@@ -3342,7 +3903,7 @@ async def admin_broadcast_preview(message: Message, state: FSMContext):
         video_id=message.video.file_id if message.video else None,
     )
     await state.set_state(AdminBroadcast.confirm)
-    users = db_get_all_users()
+    users = [u for u in db_get_all_users() if not u["is_banned"]]
     await message.answer(
         f"📤 Подтвердите отправку рассылки <b>{len(users)}</b> пользователям:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -3360,7 +3921,7 @@ async def admin_broadcast_send(call: CallbackQuery, state: FSMContext):
         return
     data = await state.get_data()
     await state.clear()
-    users = db_get_all_users()
+    users = [u for u in db_get_all_users() if not u["is_banned"]]
     sent = 0
     failed = 0
 
@@ -3406,30 +3967,81 @@ async def admin_broadcast_cancel(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-# ─────── ADMIN: STATISTICS ───────
+# ─────────────────────────────────────────────
+# ADMIN: STATISTICS (расширенная)
+# ─────────────────────────────────────────────
 
 @router.message(StateFilter(None), F.text == "📊 Статистика")
 async def admin_stats(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     await state.clear()
-    users_count, orders_count, revenue, pending_count, today_orders, products_count = db_stats()
+    users_count, orders_count, revenue, pending_count, today_orders, products_count, banned_count, new_users_week = db_stats()
     is_maint = db_is_maintenance()
     maint_status = "🔴 Закрыт (тех. перерыв)" if is_maint else "🟢 Открыт"
+
+    # Топ покупателей
+    conn = get_db()
+    top_buyers = conn.execute("""
+        SELECT u.first_name, u.last_name, u.username, o.tg_id,
+               COUNT(o.id) as cnt,
+               SUM(o.total) as spent
+        FROM orders o
+        JOIN users u ON o.tg_id = u.tg_id
+        WHERE o.status IN ('paid', 'confirmed')
+        GROUP BY o.tg_id
+        ORDER BY spent DESC
+        LIMIT 5
+    """).fetchall()
+
+    # Популярные товары
+    top_products = conn.execute("""
+        SELECT p.name, SUM(json_extract(oi.value, '$.quantity')) as total_qty
+        FROM orders o,
+             json_each(o.items) oi
+        JOIN products p ON json_extract(oi.value, '$.product_id') = p.id
+        WHERE o.status IN ('paid', 'confirmed')
+        GROUP BY json_extract(oi.value, '$.product_id')
+        ORDER BY total_qty DESC
+        LIMIT 5
+    """).fetchall()
+    conn.close()
+
+    top_buyers_text = ""
+    if top_buyers:
+        lines = []
+        for i, b in enumerate(top_buyers, 1):
+            name = f"{b['first_name']} {b['last_name'] or ''}".strip() or "—"
+            uname = f"@{b['username']}" if b["username"] else ""
+            lines.append(f"{i}. {name} {uname} — {b['spent']:.0f} ₽ ({b['cnt']} зак.)")
+        top_buyers_text = "\n\n🏆 <b>Топ покупателей:</b>\n" + "\n".join(lines)
+
+    top_products_text = ""
+    if top_products:
+        lines = []
+        for i, p in enumerate(top_products, 1):
+            lines.append(f"{i}. {p['name']} — {p['total_qty']} шт.")
+        top_products_text = "\n\n🔥 <b>Популярные товары:</b>\n" + "\n".join(lines)
 
     await message.answer(
         f"📊 <b>Статистика {SHOP_NAME}</b>\n\n"
         f"🏪 Статус магазина: {maint_status}\n\n"
         f"👥 Пользователей: <b>{users_count}</b>\n"
+        f"🆕 Новых за неделю: <b>{new_users_week}</b>\n"
+        f"🚫 Забаненных: <b>{banned_count}</b>\n"
         f"🛍 Активных товаров: <b>{products_count}</b>\n\n"
         f"📦 Всего заказов: <b>{orders_count}</b>\n"
         f"💳 Ждут подтверждения: <b>{pending_count}</b>\n"
         f"📅 Заказов сегодня: <b>{today_orders}</b>\n\n"
         f"💰 <b>Выручка (оплаченные): {revenue:.2f} ₽</b>"
+        f"{top_buyers_text}"
+        f"{top_products_text}"
     )
 
 
-# ─────── ADMIN: SETTINGS ───────
+# ─────────────────────────────────────────────
+# ADMIN: SETTINGS
+# ─────────────────────────────────────────────
 
 @router.message(StateFilter(None), F.text == "⚙️ Настройки")
 async def admin_settings(message: Message, state: FSMContext):
