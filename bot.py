@@ -23,7 +23,7 @@ from aiogram.types import (
 # CONFIG
 # ─────────────────────────────────────────────
 
-BOT_TOKEN = "ВСТАВЬ_ТОКЕН_СЮДА"
+BOT_TOKEN = "8739516166:AAGVEq4oeNb42aY-uDY1vCMOj9mNhsvucmI"
 
 ADMIN_IDS = [7752932648, 8379783147]
 
