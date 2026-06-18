@@ -29,10 +29,12 @@ ADMIN_IDS = [7752932648, 8379783147]
 
 DB_PATH = "sonnenrad.db"
 
-SHOP_NAME = "Sonnenrad"
+SHOP_NAME = "Sönnenrad"
 
-# Ссылка на оплату по умолчанию (Tinkoff)
 DEFAULT_PAYMENT_LINK = "https://www.tinkoff.ru/rm/r_HbPZNUiqBU.jnNWRPlZwL/vygOe35729"
+
+# Путь к логотипу для приветствия
+LOGO_PATH = "sonnenrad_logo.jpg"
 
 # ─────────────────────────────────────────────
 # TRANSLATIONS
@@ -47,6 +49,82 @@ LANGUAGES = {
 }
 
 T: Dict[str, Dict[str, str]] = {
+    "welcome_img": {
+        "ru": (
+            "☀️ <b>Добро пожаловать в Sönnenrad!</b>\n\n"
+            "Мы — языческий магазин северной традиции. "
+            "Здесь вы найдёте амулеты, украшения и атрибутику, "
+            "созданные с уважением к древним символам и культуре предков: "
+            "Мьёльниры, Валькнуты, руны, Одал и многое другое.\n\n"
+            "⚒ Выберите язык, чтобы начать:"
+        ),
+        "uk": (
+            "☀️ <b>Ласкаво просимо до Sönnenrad!</b>\n\n"
+            "Ми — язичницький магазин північної традиції. "
+            "Тут ви знайдете амулети, прикраси та атрибутику, "
+            "створені з повагою до давніх символів: "
+            "Мьйольніри, Валькнути, руни, Одал та багато іншого.\n\n"
+            "⚒ Оберіть мову, щоб почати:"
+        ),
+        "en": (
+            "☀️ <b>Welcome to Sönnenrad!</b>\n\n"
+            "We are a pagan shop of the Northern Tradition. "
+            "Here you'll find amulets, jewellery and sacred items "
+            "crafted with respect for ancient symbols and ancestral culture: "
+            "Mjölnirs, Valknut, runes, Othala and much more.\n\n"
+            "⚒ Choose your language to begin:"
+        ),
+        "no": (
+            "☀️ <b>Velkommen til Sönnenrad!</b>\n\n"
+            "Vi er en hedensk butikk i den nordiske tradisjonen. "
+            "Her finner du amuletter, smykker og hellige gjenstander "
+            "laget med respekt for gamle symboler: "
+            "Mjølner, Valknut, runer, Othala og mye mer.\n\n"
+            "⚒ Velg språk for å begynne:"
+        ),
+        "sv": (
+            "☀️ <b>Välkommen till Sönnenrad!</b>\n\n"
+            "Vi är en hednisk butik i den nordiska traditionen. "
+            "Här hittar du amuletter, smycken och heliga föremål "
+            "skapade med respekt för gamla symboler: "
+            "Mjölnir, Valknut, runor, Othala och mycket mer.\n\n"
+            "⚒ Välj språk för att börja:"
+        ),
+    },
+    "maintenance": {
+        "ru": (
+            "🔧 <b>Магазин временно закрыт на техническое обслуживание.</b>\n\n"
+            "{time_info}"
+            "Приносим извинения за неудобства. Скоро вернёмся! ☀️"
+        ),
+        "uk": (
+            "🔧 <b>Магазин тимчасово закритий на технічне обслуговування.</b>\n\n"
+            "{time_info}"
+            "Вибачте за незручності. Незабаром повернемось! ☀️"
+        ),
+        "en": (
+            "🔧 <b>The shop is temporarily closed for maintenance.</b>\n\n"
+            "{time_info}"
+            "We apologise for the inconvenience. We'll be back soon! ☀️"
+        ),
+        "no": (
+            "🔧 <b>Butikken er midlertidig stengt for vedlikehold.</b>\n\n"
+            "{time_info}"
+            "Vi beklager ulempen. Vi er snart tilbake! ☀️"
+        ),
+        "sv": (
+            "🔧 <b>Butiken är tillfälligt stängd för underhåll.</b>\n\n"
+            "{time_info}"
+            "Vi ber om ursäkt för besväret. Vi är snart tillbaka! ☀️"
+        ),
+    },
+    "maintenance_time": {
+        "ru": "⏱ Примерное время: <b>{time}</b>\n\n",
+        "uk": "⏱ Приблизний час: <b>{time}</b>\n\n",
+        "en": "⏱ Estimated time: <b>{time}</b>\n\n",
+        "no": "⏱ Estimert tid: <b>{time}</b>\n\n",
+        "sv": "⏱ Beräknad tid: <b>{time}</b>\n\n",
+    },
     "welcome": {
         "ru": f"☀️ Добро пожаловать в <b>{SHOP_NAME}</b>!\n\nВыберите язык:",
         "uk": f"☀️ Ласкаво просимо до <b>{SHOP_NAME}</b>!\n\nОберіть мову:",
@@ -578,11 +656,13 @@ def init_db():
     );
     """)
 
-    # Вставляем ссылку Tinkoff как дефолтную — не перезаписываем если уже задана
     c.execute(
         "INSERT OR IGNORE INTO settings (key, value) VALUES ('payment_link', ?)",
         (DEFAULT_PAYMENT_LINK,)
     )
+    # maintenance: 0=открыт, 1=закрыт
+    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('maintenance', '0')")
+    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('maintenance_time', '')")
     conn.commit()
     conn.close()
 
@@ -620,6 +700,20 @@ def db_set_lang(tg_id: int, lang: str):
 def db_get_lang(tg_id: int) -> str:
     user = db_get_user(tg_id)
     return user["lang"] if user else "en"
+
+
+def db_is_maintenance() -> bool:
+    conn = get_db()
+    row = conn.execute("SELECT value FROM settings WHERE key='maintenance'").fetchone()
+    conn.close()
+    return row and row["value"] == "1"
+
+
+def db_get_maintenance_time() -> str:
+    conn = get_db()
+    row = conn.execute("SELECT value FROM settings WHERE key='maintenance_time'").fetchone()
+    conn.close()
+    return row["value"] if row else ""
 
 
 # ── CATEGORIES ──
@@ -686,30 +780,6 @@ def db_get_products_by_category(cat_id: int):
     ).fetchall()
     conn.close()
     return rows
-
-
-def db_get_active_products(page: int = 0, per_page: int = 1, category_id: int = None):
-    conn = get_db()
-    offset = page * per_page
-    if category_id is not None:
-        rows = conn.execute(
-            "SELECT * FROM products WHERE is_active=1 AND category_id=? ORDER BY id DESC LIMIT ? OFFSET ?",
-            (category_id, per_page, offset)
-        ).fetchall()
-        total = conn.execute(
-            "SELECT COUNT(*) FROM products WHERE is_active=1 AND category_id=?",
-            (category_id,)
-        ).fetchone()[0]
-    else:
-        rows = conn.execute(
-            "SELECT * FROM products WHERE is_active=1 ORDER BY id DESC LIMIT ? OFFSET ?",
-            (per_page, offset)
-        ).fetchall()
-        total = conn.execute(
-            "SELECT COUNT(*) FROM products WHERE is_active=1"
-        ).fetchone()[0]
-    conn.close()
-    return rows, total
 
 
 def db_get_product(product_id: int) -> Optional[sqlite3.Row]:
@@ -1052,6 +1122,11 @@ class AdminEditCategory(StatesGroup):
     value = State()
 
 
+class AdminMaintenance(StatesGroup):
+    set_time = State()
+    broadcast_confirm = State()
+
+
 # ─────────────────────────────────────────────
 # KEYBOARDS
 # ─────────────────────────────────────────────
@@ -1197,7 +1272,7 @@ def kb_admin_main() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="📦 Заказы"), KeyboardButton(text="🎟 Промокоды")],
             [KeyboardButton(text="👥 Клиенты"), KeyboardButton(text="📊 Статистика")],
             [KeyboardButton(text="📢 Рассылка"), KeyboardButton(text="⚙️ Настройки")],
-            [KeyboardButton(text="🏠 Выход из панели")],
+            [KeyboardButton(text="🔧 Тех. перерыв"), KeyboardButton(text="🏠 Выход из панели")],
         ],
         resize_keyboard=True
     )
@@ -1323,6 +1398,19 @@ def kb_select_category_for_product(categories) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def kb_maintenance_actions(is_on: bool) -> InlineKeyboardMarkup:
+    if is_on:
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Открыть магазин", callback_data="maint_off")],
+            [InlineKeyboardButton(text="✏️ Изменить время", callback_data="maint_set_time")],
+            [InlineKeyboardButton(text="📢 Рассылка о перерыве", callback_data="maint_broadcast")],
+        ])
+    else:
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔧 Закрыть на тех. перерыв", callback_data="maint_on")],
+        ])
+
+
 # ─────────────────────────────────────────────
 # HELPER FUNCTIONS
 # ─────────────────────────────────────────────
@@ -1381,6 +1469,15 @@ def build_cart_text(cart, lang: str) -> str:
     return "\n".join(lines)
 
 
+def build_maintenance_text(lang: str) -> str:
+    maint_time = db_get_maintenance_time()
+    if maint_time:
+        time_info = t("maintenance_time", lang, time=maint_time)
+    else:
+        time_info = ""
+    return t("maintenance", lang, time_info=time_info)
+
+
 # ─────────────────────────────────────────────
 # BOT SETUP
 # ─────────────────────────────────────────────
@@ -1401,8 +1498,20 @@ logger = logging.getLogger(__name__)
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     tg_id = message.from_user.id
-    user = db_get_user(tg_id)
 
+    # Admins bypass maintenance
+    if not is_admin(tg_id) and db_is_maintenance():
+        # Определяем язык (en по умолчанию для новых)
+        lang = db_get_lang(tg_id) or "ru"
+        text = build_maintenance_text(lang)
+        if os.path.exists(LOGO_PATH):
+            photo = FSInputFile(LOGO_PATH)
+            await message.answer_photo(photo=photo, caption=text)
+        else:
+            await message.answer(text)
+        return
+
+    user = db_get_user(tg_id)
     db_upsert_user(
         tg_id,
         message.from_user.username or "",
@@ -1411,11 +1520,18 @@ async def cmd_start(message: Message, state: FSMContext):
     )
 
     if not user or not user["lang"]:
+        # Новый пользователь — показываем приветствие с фото и выбором языка
         await state.set_state(LangState.choosing)
-        await message.answer(
-            T["welcome"]["ru"],
-            reply_markup=kb_lang_select()
-        )
+        welcome_text = T["welcome_img"].get("ru")  # по умолчанию ru для нового
+        if os.path.exists(LOGO_PATH):
+            photo = FSInputFile(LOGO_PATH)
+            await message.answer_photo(
+                photo=photo,
+                caption=welcome_text,
+                reply_markup=kb_lang_select()
+            )
+        else:
+            await message.answer(welcome_text, reply_markup=kb_lang_select())
     else:
         lang = user["lang"]
         await message.answer(
@@ -1432,9 +1548,12 @@ async def cb_lang_chosen(call: CallbackQuery, state: FSMContext):
         return
     db_set_lang(call.from_user.id, lang)
     await state.clear()
-    await call.message.edit_reply_markup()
+    try:
+        await call.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     await call.message.answer(
-        t("language_saved", lang),
+        t("language_saved", lang) + "\n\n" + t("main_menu", lang),
         reply_markup=kb_main_menu(lang)
     )
     await call.answer()
@@ -1780,7 +1899,6 @@ async def checkout_address(message: Message, state: FSMContext):
 @router.message(CheckoutState.promo)
 async def checkout_promo(message: Message, state: FSMContext):
     lang = db_get_lang(message.from_user.id)
-    # FIX: сравниваем с текстом кнопки «Пропустить» на языке пользователя
     skip_text = t("skip", lang)
     text = message.text.strip()
 
@@ -1800,7 +1918,6 @@ async def checkout_promo(message: Message, state: FSMContext):
         else:
             await message.answer(t("promo_invalid", lang), reply_markup=kb_skip(lang))
             return
-    # Если текст == skip_text — просто пропускаем промокод, идём дальше
 
     await state.update_data(
         promo_code=promo_code,
@@ -1864,7 +1981,6 @@ async def cb_order_confirm(call: CallbackQuery, state: FSMContext):
     db_clear_cart(tg_id)
     await state.clear()
 
-    # FIX: fallback на DEFAULT_PAYMENT_LINK если в БД пусто
     payment_link = db_get_setting("payment_link") or DEFAULT_PAYMENT_LINK
 
     await call.message.answer(
@@ -1900,14 +2016,11 @@ async def cb_paid(call: CallbackQuery):
         await call.answer("Заявка уже отправлена ранее.", show_alert=True)
         return
 
-    # FIX: статус меняем на 'paid', остатки списываем только после подтверждения админом
     db_set_order_status(order_id, "paid")
 
     items = json.loads(order["items"])
-
     user = db_get_user(tg_id)
     username_str = f"@{user['username']}" if user and user["username"] else "—"
-
     items_text = format_order_items_text(items)
     promo_info = ""
     if order["promo_code"]:
@@ -1929,11 +2042,7 @@ async def cb_paid(call: CallbackQuery):
 
     for admin_id in ADMIN_IDS:
         try:
-            await bot.send_message(
-                admin_id,
-                admin_text,
-                reply_markup=kb_admin_order(order_id)
-            )
+            await bot.send_message(admin_id, admin_text, reply_markup=kb_admin_order(order_id))
         except Exception:
             pass
 
@@ -1964,7 +2073,6 @@ async def cb_admin_confirm(call: CallbackQuery):
 
     db_set_order_status(order_id, "confirmed")
 
-    # FIX: списываем остатки только при подтверждении, уведомляем если мало
     items = json.loads(order["items"])
     for item in items:
         new_stock = db_decrement_stock(
@@ -1982,7 +2090,10 @@ async def cb_admin_confirm(call: CallbackQuery):
             except Exception:
                 pass
 
-    await call.message.edit_reply_markup(reply_markup=None)
+    try:
+        await call.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     await call.message.answer(f"✅ Заказ #{order_id} подтверждён.")
     lang = db_get_lang(order["tg_id"])
     try:
@@ -2009,7 +2120,10 @@ async def cb_admin_reject(call: CallbackQuery):
         await call.answer("Заказ уже отклонён", show_alert=True)
         return
     db_set_order_status(order_id, "rejected")
-    await call.message.edit_reply_markup(reply_markup=None)
+    try:
+        await call.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     await call.message.answer(f"❌ Заказ #{order_id} отклонён.")
     lang = db_get_lang(order["tg_id"])
     try:
@@ -2093,7 +2207,7 @@ async def handle_settings(message: Message, state: FSMContext):
 async def cb_change_lang(call: CallbackQuery, state: FSMContext):
     lang = db_get_lang(call.from_user.id)
     await state.set_state(LangState.choosing)
-    await call.message.answer(T["welcome"].get(lang, T["welcome"]["en"]), reply_markup=kb_lang_select())
+    await call.message.answer(T["welcome_img"].get(lang, T["welcome_img"]["en"]), reply_markup=kb_lang_select())
     await call.answer()
 
 
@@ -2106,8 +2220,12 @@ async def cmd_admin(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     await state.clear()
+    is_maint = db_is_maintenance()
+    maint_status = "🔴 Закрыт (тех. перерыв)" if is_maint else "🟢 Открыт"
     await message.answer(
-        f"🛡 <b>Панель администратора {SHOP_NAME}</b>\n\nВыберите раздел:",
+        f"🛡 <b>Панель администратора {SHOP_NAME}</b>\n\n"
+        f"Статус магазина: {maint_status}\n\n"
+        f"Выберите раздел:",
         reply_markup=kb_admin_main()
     )
 
@@ -2119,6 +2237,193 @@ async def admin_exit(message: Message, state: FSMContext):
     await state.clear()
     lang = db_get_lang(message.from_user.id)
     await message.answer(t("main_menu", lang), reply_markup=kb_main_menu(lang))
+
+
+# ─────── ADMIN: MAINTENANCE ───────
+
+@router.message(F.text == "🔧 Тех. перерыв")
+async def admin_maintenance(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    await state.clear()
+    is_on = db_is_maintenance()
+    maint_time = db_get_maintenance_time()
+
+    status_text = "🔴 <b>Магазин ЗАКРЫТ</b> (тех. перерыв)" if is_on else "🟢 <b>Магазин ОТКРЫТ</b>"
+    time_text = f"\n⏱ Время перерыва: <b>{maint_time}</b>" if maint_time else ""
+
+    await message.answer(
+        f"🔧 <b>Технический перерыв</b>\n\n"
+        f"Статус: {status_text}{time_text}\n\n"
+        f"При включённом тех. перерыве пользователи будут видеть сообщение о закрытии при /start.",
+        reply_markup=kb_maintenance_actions(is_on)
+    )
+
+
+@router.callback_query(F.data == "maint_on")
+async def cb_maint_on(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        return
+    await state.set_state(AdminMaintenance.set_time)
+    await call.message.answer(
+        "⏱ Введите примерное время тех. перерыва (например: <b>30 минут</b>, <b>1-2 часа</b>, <b>до 20:00</b>).\n\n"
+        "Или отправьте <b>-</b> чтобы не указывать время:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await call.answer()
+
+
+@router.message(AdminMaintenance.set_time)
+async def adm_maintenance_time(message: Message, state: FSMContext):
+    time_str = message.text.strip()
+    if time_str == "-":
+        time_str = ""
+    db_set_setting("maintenance_time", time_str)
+    db_set_setting("maintenance", "1")
+    await state.clear()
+
+    time_info = f" Время: <b>{time_str}</b>" if time_str else ""
+    await message.answer(
+        f"🔴 <b>Магазин закрыт на тех. перерыв.</b>{time_info}\n\n"
+        f"Пользователи будут видеть сообщение о перерыве при попытке запустить бот.",
+        reply_markup=kb_admin_main()
+    )
+
+    # Предложить рассылку
+    await message.answer(
+        "Хотите разослать уведомление о тех. перерыве всем пользователям?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📢 Да, разослать", callback_data="maint_broadcast"),
+                InlineKeyboardButton(text="❌ Нет", callback_data="noop"),
+            ]
+        ])
+    )
+
+
+@router.callback_query(F.data == "maint_set_time")
+async def cb_maint_set_time(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        return
+    await state.set_state(AdminMaintenance.set_time)
+    await call.message.answer(
+        "⏱ Введите новое примерное время тех. перерыва (например: <b>1 час</b>, <b>до 18:00</b>).\n\n"
+        "Отправьте <b>-</b> чтобы убрать время:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == "maint_off")
+async def cb_maint_off(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    db_set_setting("maintenance", "0")
+    db_set_setting("maintenance_time", "")
+    try:
+        await call.message.edit_reply_markup(reply_markup=kb_maintenance_actions(False))
+    except Exception:
+        pass
+    await call.message.answer(
+        "🟢 <b>Магазин открыт!</b> Пользователи снова могут пользоваться ботом.\n\n"
+        "Хотите разослать уведомление об открытии?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📢 Разослать об открытии", callback_data="maint_broadcast_open"),
+                InlineKeyboardButton(text="❌ Нет", callback_data="noop"),
+            ]
+        ])
+    )
+    await call.answer("Магазин открыт!")
+
+
+@router.callback_query(F.data == "maint_broadcast")
+async def cb_maint_broadcast(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        return
+    maint_time = db_get_maintenance_time()
+    users = db_get_all_users()
+
+    time_line = f"\n⏱ Примерное время: <b>{maint_time}</b>" if maint_time else ""
+    broadcast_text = (
+        f"🔧 <b>Уважаемые покупатели!</b>\n\n"
+        f"Магазин <b>{SHOP_NAME}</b> временно закрыт на техническое обслуживание.{time_line}\n\n"
+        f"Приносим извинения за неудобства. Скоро вернёмся! ☀️"
+    )
+
+    await call.message.answer(
+        f"📢 Будет отправлено <b>{len(users)}</b> пользователям:\n\n{broadcast_text}",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Отправить", callback_data="maint_bc_confirm:close"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="noop"),
+            ]
+        ])
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == "maint_broadcast_open")
+async def cb_maint_broadcast_open(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    users = db_get_all_users()
+    broadcast_text = (
+        f"🟢 <b>Магазин {SHOP_NAME} снова открыт!</b>\n\n"
+        f"Добро пожаловать! Ждём вас в нашем каталоге. ☀️\n\n"
+        f"Нажмите /start чтобы начать."
+    )
+    await call.message.answer(
+        f"📢 Будет отправлено <b>{len(users)}</b> пользователям:\n\n{broadcast_text}",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Отправить", callback_data="maint_bc_confirm:open"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="noop"),
+            ]
+        ])
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("maint_bc_confirm:"))
+async def cb_maint_bc_confirm(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    mode = call.data.split(":")[1]
+    users = db_get_all_users()
+    maint_time = db_get_maintenance_time()
+
+    if mode == "close":
+        time_line = f"\n⏱ Примерное время: <b>{maint_time}</b>" if maint_time else ""
+        text = (
+            f"🔧 <b>Уважаемые покупатели!</b>\n\n"
+            f"Магазин <b>{SHOP_NAME}</b> временно закрыт на техническое обслуживание.{time_line}\n\n"
+            f"Приносим извинения за неудобства. Скоро вернёмся! ☀️"
+        )
+    else:
+        text = (
+            f"🟢 <b>Магазин {SHOP_NAME} снова открыт!</b>\n\n"
+            f"Добро пожаловать! Ждём вас в нашем каталоге. ☀️\n\n"
+            f"Нажмите /start чтобы начать."
+        )
+
+    await call.message.answer(f"⏳ Рассылка на {len(users)} пользователей...")
+    await call.answer()
+
+    sent = 0
+    failed = 0
+    for user in users:
+        try:
+            await bot.send_message(chat_id=user["tg_id"], text=text)
+            sent += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            failed += 1
+
+    await call.message.answer(
+        f"📢 <b>Рассылка завершена!</b>\n✅ Доставлено: {sent}\n❌ Ошибок: {failed}",
+        reply_markup=kb_admin_main()
+    )
 
 
 # ─────── ADMIN: CATEGORIES ───────
@@ -2262,8 +2567,7 @@ async def cb_adm_cat_edit(call: CallbackQuery, state: FSMContext):
     await state.set_state(AdminEditCategory.field)
     await state.update_data(cat_id=cat_id)
     await call.message.answer(
-        f"✏️ Редактирование категории <b>{cat['emoji']} {cat['name']}</b>\n\n"
-        f"Что изменить?",
+        f"✏️ Редактирование категории <b>{cat['emoji']} {cat['name']}</b>\n\nЧто изменить?",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="📝 Название", callback_data=f"adm_cef:{cat_id}:name")],
             [InlineKeyboardButton(text="🔣 Эмодзи", callback_data=f"adm_cef:{cat_id}:emoji")],
@@ -2317,7 +2621,7 @@ async def adm_cat_edit_value(message: Message, state: FSMContext):
 
     db_update_category(cat_id, name, emoji, sort_order, cat["is_active"])
     await state.clear()
-    await message.answer(f"✅ Категория обновлена.", reply_markup=kb_admin_main())
+    await message.answer("✅ Категория обновлена.", reply_markup=kb_admin_main())
 
 
 # ─────── ADMIN: PRODUCTS ───────
@@ -2712,7 +3016,7 @@ async def adm_edit_value(message: Message, state: FSMContext):
 
     db_update_product_field(product_id, field, value)
     await state.clear()
-    await message.answer(f"✅ Поле обновлено.", reply_markup=kb_admin_main())
+    await message.answer("✅ Поле обновлено.", reply_markup=kb_admin_main())
 
 
 # ─────── ADMIN: STOCK ───────
@@ -3109,9 +3413,12 @@ async def admin_stats(message: Message, state: FSMContext):
         return
     await state.clear()
     users_count, orders_count, revenue, pending_count, today_orders, products_count = db_stats()
+    is_maint = db_is_maintenance()
+    maint_status = "🔴 Закрыт (тех. перерыв)" if is_maint else "🟢 Открыт"
 
     await message.answer(
         f"📊 <b>Статистика {SHOP_NAME}</b>\n\n"
+        f"🏪 Статус магазина: {maint_status}\n\n"
         f"👥 Пользователей: <b>{users_count}</b>\n"
         f"🛍 Активных товаров: <b>{products_count}</b>\n\n"
         f"📦 Всего заказов: <b>{orders_count}</b>\n"
