@@ -3,6 +3,8 @@ import logging
 import sqlite3
 import os
 import json
+import csv
+import io
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -33,7 +35,6 @@ DB_PATH = "sonnenrad.db"
 
 SHOP_NAME = "Sönnenrad"
 
-# Юзернейм менеджера заказов (без @)
 ORDER_MANAGER_USERNAME = "sonnenradshop"
 
 LOGO_PATH = "sonnenrad_logo.jpg"
@@ -403,39 +404,38 @@ T: Dict[str, Dict[str, str]] = {
         "no": "❌ Avbryt",
         "sv": "❌ Avbryt",
     },
-    # ── НОВЫЙ ТЕКСТ: вместо ссылки на оплату ──
     "order_placed": {
         "ru": (
             "🎉 <b>Заказ #{order_id} оформлен!</b>\n\n"
-            "📋 <b>Детали вашего заказа сформированы и готовы к отправке менеджеру.</b>\n\n"
-            "Нажмите кнопку <b>«📩 Написать менеджеру»</b> — откроется чат с готовым сообщением.\n"
-            "Просто отправьте его, и менеджер свяжется с вами для оформления оплаты и доставки.\n\n"
+            "📋 Детали вашего заказа готовы.\n\n"
+            "Нажмите <b>«📩 Написать менеджеру»</b> — откроется чат с готовым сообщением.\n"
+            "Просто отправьте его, и менеджер свяжется с вами для подтверждения и доставки.\n\n"
             "<i>⏱ Среднее время ответа: до 30 минут</i>"
         ),
         "uk": (
             "🎉 <b>Замовлення #{order_id} оформлено!</b>\n\n"
-            "📋 <b>Деталі вашого замовлення сформовані та готові до відправки менеджеру.</b>\n\n"
-            "Натисніть кнопку <b>«📩 Написати менеджеру»</b> — відкриється чат з готовим повідомленням.\n"
+            "📋 Деталі вашого замовлення готові.\n\n"
+            "Натисніть <b>«📩 Написати менеджеру»</b> — відкриється чат з готовим повідомленням.\n"
             "Просто надішліть його, і менеджер зв'яжеться з вами.\n\n"
             "<i>⏱ Середній час відповіді: до 30 хвилин</i>"
         ),
         "en": (
             "🎉 <b>Order #{order_id} placed!</b>\n\n"
-            "📋 <b>Your order details are ready to send to our manager.</b>\n\n"
+            "📋 Your order details are ready.\n\n"
             "Press <b>«📩 Message Manager»</b> — a chat will open with a pre-filled message.\n"
-            "Just send it and our manager will contact you for payment and delivery details.\n\n"
+            "Just send it and our manager will contact you.\n\n"
             "<i>⏱ Average response time: up to 30 minutes</i>"
         ),
         "no": (
             "🎉 <b>Bestilling #{order_id} er lagt inn!</b>\n\n"
-            "📋 <b>Bestillingsdetaljene dine er klare til å sendes til vår leder.</b>\n\n"
+            "📋 Bestillingsdetaljene dine er klare.\n\n"
             "Trykk <b>«📩 Skriv til leder»</b> — en chat åpnes med en ferdig melding.\n"
             "Bare send den og lederen vår kontakter deg.\n\n"
             "<i>⏱ Gjennomsnittlig responstid: opptil 30 minutter</i>"
         ),
         "sv": (
             "🎉 <b>Beställning #{order_id} lagd!</b>\n\n"
-            "📋 <b>Dina beställningsdetaljer är redo att skickas till vår chef.</b>\n\n"
+            "📋 Dina beställningsdetaljer är redo.\n\n"
             "Tryck <b>«📩 Skriv till chefen»</b> — en chatt öppnas med ett färdigt meddelande.\n"
             "Skicka det bara så kontaktar vår chef dig.\n\n"
             "<i>⏱ Genomsnittlig svarstid: upp till 30 minuter</i>"
@@ -448,7 +448,6 @@ T: Dict[str, Dict[str, str]] = {
         "no": "📩 Skriv til leder",
         "sv": "📩 Skriv till chefen",
     },
-    # Текст, который будет предзаполнен в сообщении менеджеру
     "manager_prefill": {
         "ru": (
             "Здравствуйте! Хочу приобрести одежду в Sönnenrad.\n\n"
@@ -523,18 +522,18 @@ T: Dict[str, Dict[str, str]] = {
         "sv": "📦 Du har inga beställningar ännu.\n\nGör din första beställning från katalogen! 🛍",
     },
     "order_status_pending": {
-        "ru": "⏳ Ожидает оплаты",
-        "uk": "⏳ Очікує оплати",
-        "en": "⏳ Pending Payment",
-        "no": "⏳ Venter på betaling",
-        "sv": "⏳ Väntar på betalning",
+        "ru": "⏳ Ожидает обработки",
+        "uk": "⏳ Очікує обробки",
+        "en": "⏳ Pending",
+        "no": "⏳ Venter",
+        "sv": "⏳ Väntar",
     },
     "order_status_paid": {
-        "ru": "💳 Оплачен, ожидает подтверждения",
-        "uk": "💳 Оплачено, очікує підтвердження",
-        "en": "💳 Paid, awaiting confirmation",
-        "no": "💳 Betalt, venter på bekreftelse",
-        "sv": "💳 Betald, väntar på bekräftelse",
+        "ru": "💳 Оплачен",
+        "uk": "💳 Оплачено",
+        "en": "💳 Paid",
+        "no": "💳 Betalt",
+        "sv": "💳 Betald",
     },
     "order_status_confirmed": {
         "ru": "✅ Подтверждён",
@@ -641,6 +640,7 @@ def init_db():
         last_name TEXT,
         lang TEXT DEFAULT 'en',
         is_banned INTEGER DEFAULT 0,
+        ban_reason TEXT DEFAULT '',
         note TEXT DEFAULT '',
         created_at TEXT DEFAULT (datetime('now'))
     );
@@ -700,6 +700,7 @@ def init_db():
         discount_amount REAL DEFAULT 0,
         total REAL NOT NULL,
         status TEXT DEFAULT 'pending',
+        admin_note TEXT DEFAULT '',
         created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -709,6 +710,7 @@ def init_db():
         type TEXT NOT NULL,
         value REAL NOT NULL,
         is_active INTEGER DEFAULT 1,
+        uses_count INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -716,16 +718,50 @@ def init_db():
         key TEXT PRIMARY KEY,
         value TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS admin_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admin_id INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        details TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS extra_admins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tg_id INTEGER UNIQUE NOT NULL,
+        username TEXT DEFAULT '',
+        added_by INTEGER NOT NULL,
+        added_at TEXT DEFAULT (datetime('now'))
+    );
     """)
 
-    try:
-        c.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0")
-    except Exception:
-        pass
-    try:
-        c.execute("ALTER TABLE users ADD COLUMN note TEXT DEFAULT ''")
-    except Exception:
-        pass
+    # migrate old columns
+    for col, default in [
+        ("is_banned", "INTEGER DEFAULT 0"),
+        ("ban_reason", "TEXT DEFAULT ''"),
+        ("note", "TEXT DEFAULT ''"),
+    ]:
+        try:
+            c.execute(f"ALTER TABLE users ADD COLUMN {col} {default}")
+        except Exception:
+            pass
+
+    for col, default in [
+        ("admin_note", "TEXT DEFAULT ''"),
+    ]:
+        try:
+            c.execute(f"ALTER TABLE orders ADD COLUMN {col} {default}")
+        except Exception:
+            pass
+
+    for col, default in [
+        ("uses_count", "INTEGER DEFAULT 0"),
+    ]:
+        try:
+            c.execute(f"ALTER TABLE promo_codes ADD COLUMN {col} {default}")
+        except Exception:
+            pass
 
     c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('maintenance', '0')")
     c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('maintenance_time', '')")
@@ -774,16 +810,16 @@ def db_is_banned(tg_id: int) -> bool:
     return bool(user and user["is_banned"])
 
 
-def db_ban_user(tg_id: int):
+def db_ban_user(tg_id: int, reason: str = ""):
     conn = get_db()
-    conn.execute("UPDATE users SET is_banned=1 WHERE tg_id=?", (tg_id,))
+    conn.execute("UPDATE users SET is_banned=1, ban_reason=? WHERE tg_id=?", (reason, tg_id))
     conn.commit()
     conn.close()
 
 
 def db_unban_user(tg_id: int):
     conn = get_db()
-    conn.execute("UPDATE users SET is_banned=0 WHERE tg_id=?", (tg_id,))
+    conn.execute("UPDATE users SET is_banned=0, ban_reason='' WHERE tg_id=?", (tg_id,))
     conn.commit()
     conn.close()
 
@@ -814,6 +850,58 @@ def db_get_order_manager() -> str:
     row = conn.execute("SELECT value FROM settings WHERE key='order_manager'").fetchone()
     conn.close()
     return row["value"] if row else ORDER_MANAGER_USERNAME
+
+
+# ── EXTRA ADMINS ──
+
+def db_get_extra_admins():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM extra_admins ORDER BY added_at DESC").fetchall()
+    conn.close()
+    return rows
+
+
+def db_add_extra_admin(tg_id: int, username: str, added_by: int):
+    conn = get_db()
+    conn.execute(
+        "INSERT OR IGNORE INTO extra_admins (tg_id, username, added_by) VALUES (?,?,?)",
+        (tg_id, username, added_by)
+    )
+    conn.commit()
+    conn.close()
+
+
+def db_remove_extra_admin(tg_id: int):
+    conn = get_db()
+    conn.execute("DELETE FROM extra_admins WHERE tg_id=?", (tg_id,))
+    conn.commit()
+    conn.close()
+
+
+def db_get_all_admin_ids() -> list:
+    extra = db_get_extra_admins()
+    return ADMIN_IDS + [r["tg_id"] for r in extra]
+
+
+# ── ADMIN LOG ──
+
+def db_log(admin_id: int, action: str, details: str = ""):
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO admin_log (admin_id, action, details) VALUES (?,?,?)",
+        (admin_id, action, details)
+    )
+    conn.commit()
+    conn.close()
+
+
+def db_get_log(limit: int = 50):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM admin_log ORDER BY id DESC LIMIT ?", (limit,)
+    ).fetchall()
+    conn.close()
+    return rows
 
 
 # ── CATEGORIES ──
@@ -998,6 +1086,13 @@ def db_get_promo(code: str) -> Optional[sqlite3.Row]:
     return row
 
 
+def db_increment_promo_uses(code: str):
+    conn = get_db()
+    conn.execute("UPDATE promo_codes SET uses_count=uses_count+1 WHERE code=?", (code.upper(),))
+    conn.commit()
+    conn.close()
+
+
 def db_create_order(tg_id: int, name: str, phone: str, address: str, items: list,
                     promo_code: str, discount_amount: float, total: float) -> int:
     conn = get_db()
@@ -1022,6 +1117,13 @@ def db_get_order(order_id: int) -> Optional[sqlite3.Row]:
 def db_set_order_status(order_id: int, status: str):
     conn = get_db()
     conn.execute("UPDATE orders SET status=? WHERE id=?", (status, order_id))
+    conn.commit()
+    conn.close()
+
+
+def db_set_order_note(order_id: int, note: str):
+    conn = get_db()
+    conn.execute("UPDATE orders SET admin_note=? WHERE id=?", (note, order_id))
     conn.commit()
     conn.close()
 
@@ -1146,7 +1248,7 @@ def db_stats():
         "SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ('paid','confirmed')"
     ).fetchone()[0]
     pending_count = conn.execute(
-        "SELECT COUNT(*) FROM orders WHERE status='paid'"
+        "SELECT COUNT(*) FROM orders WHERE status='pending'"
     ).fetchone()[0]
     today_orders = conn.execute(
         "SELECT COUNT(*) FROM orders WHERE date(created_at)=date('now')"
@@ -1158,6 +1260,20 @@ def db_stats():
     ).fetchone()[0]
     conn.close()
     return users_count, orders_count, revenue, pending_count, today_orders, products_count, banned_count, new_users_week
+
+
+def db_search_orders(query: str):
+    conn = get_db()
+    try:
+        oid = int(query)
+        rows = conn.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchall()
+    except ValueError:
+        rows = conn.execute(
+            "SELECT * FROM orders WHERE name LIKE ? OR phone LIKE ? OR address LIKE ?",
+            (f"%{query}%", f"%{query}%", f"%{query}%")
+        ).fetchall()
+    conn.close()
+    return rows
 
 
 # ─────────────────────────────────────────────
@@ -1219,7 +1335,6 @@ class AdminEditCategory(StatesGroup):
 
 class AdminMaintenance(StatesGroup):
     set_time = State()
-    broadcast_confirm = State()
 
 
 class AdminPasswordState(StatesGroup):
@@ -1230,11 +1345,33 @@ class AdminUserAction(StatesGroup):
     waiting_note = State()
     waiting_search = State()
     waiting_message = State()
-    waiting_broadcast_segment = State()
+    waiting_ban_reason = State()
+    waiting_order_note = State()
+    waiting_order_search = State()
 
 
 class AdminSettingsState(StatesGroup):
     set_manager = State()
+
+
+class AdminExtraAdmin(StatesGroup):
+    add_id = State()
+
+
+class AdminOrderDiscount(StatesGroup):
+    entering = State()
+
+
+# ─────────────────────────────────────────────
+# HELPERS
+# ─────────────────────────────────────────────
+
+def is_admin(tg_id: int) -> bool:
+    return tg_id in db_get_all_admin_ids()
+
+
+def is_superadmin(tg_id: int) -> bool:
+    return tg_id in ADMIN_IDS
 
 
 # ─────────────────────────────────────────────
@@ -1345,7 +1482,6 @@ def kb_confirm_order(lang: str) -> InlineKeyboardMarkup:
 
 
 def kb_contact_manager(order_id: int, manager_username: str, prefill_text: str, lang: str) -> InlineKeyboardMarkup:
-    """Кнопка для открытия чата с менеджером с предзаполненным текстом."""
     import urllib.parse
     encoded = urllib.parse.quote(prefill_text)
     url = f"https://t.me/{manager_username}?text={encoded}"
@@ -1378,7 +1514,8 @@ def kb_admin_main() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="📦 Заказы"), KeyboardButton(text="🎟 Промокоды")],
             [KeyboardButton(text="👥 Клиенты"), KeyboardButton(text="📊 Статистика")],
             [KeyboardButton(text="📢 Рассылка"), KeyboardButton(text="⚙️ Настройки")],
-            [KeyboardButton(text="🔧 Тех. перерыв"), KeyboardButton(text="🏠 Выход из панели")],
+            [KeyboardButton(text="🔧 Тех. перерыв"), KeyboardButton(text="👮 Администраторы")],
+            [KeyboardButton(text="📋 Лог действий"), KeyboardButton(text="🏠 Выход из панели")],
         ],
         resize_keyboard=True
     )
@@ -1435,7 +1572,7 @@ def kb_admin_promos(promos) -> InlineKeyboardMarkup:
         status = "✅" if p["is_active"] else "🚫"
         disc = f"{p['value']:.0f}%" if p["type"] == "percent" else f"{p['value']:.0f} ₽"
         rows.append([InlineKeyboardButton(
-            text=f"{status} {p['code']} −{disc}",
+            text=f"{status} {p['code']} −{disc} (×{p['uses_count']})",
             callback_data=f"adm_promo:{p['id']}"
         )])
     rows.append([InlineKeyboardButton(text="➕ Добавить промокод", callback_data="adm_add_promo")])
@@ -1511,17 +1648,21 @@ def kb_maintenance_actions(is_on: bool) -> InlineKeyboardMarkup:
         ])
 
 
-def kb_admin_user_actions(tg_id: int, is_banned: int) -> InlineKeyboardMarkup:
+def kb_admin_user_actions(tg_id: int, is_banned: int, is_superadmin_call: bool = False) -> InlineKeyboardMarkup:
     ban_text = "✅ Разбанить" if is_banned else "🚫 Забанить"
-    ban_cb = f"adm_unban:{tg_id}" if is_banned else f"adm_ban:{tg_id}"
-    return InlineKeyboardMarkup(inline_keyboard=[
+    ban_cb = f"adm_unban:{tg_id}" if is_banned else f"adm_ban_start:{tg_id}"
+    rows = [
         [InlineKeyboardButton(text=ban_text, callback_data=ban_cb)],
         [InlineKeyboardButton(text="✉️ Написать пользователю", callback_data=f"adm_msg_user:{tg_id}")],
-        [InlineKeyboardButton(text="📝 Добавить заметку", callback_data=f"adm_note:{tg_id}")],
-        [InlineKeyboardButton(text="📦 Заказы пользователя", callback_data=f"adm_user_orders:{tg_id}")],
-        [InlineKeyboardButton(text="🛒 Корзина пользователя", callback_data=f"adm_user_cart:{tg_id}")],
-        [InlineKeyboardButton(text="⬅️ Назад к клиентам", callback_data="adm_back_clients")],
-    ])
+        [InlineKeyboardButton(text="📝 Заметка", callback_data=f"adm_note:{tg_id}"),
+         InlineKeyboardButton(text="🗑 Очистить корзину", callback_data=f"adm_clear_cart:{tg_id}")],
+        [InlineKeyboardButton(text="📦 Заказы", callback_data=f"adm_user_orders:{tg_id}"),
+         InlineKeyboardButton(text="🛒 Корзина", callback_data=f"adm_user_cart:{tg_id}")],
+    ]
+    if is_superadmin_call and tg_id not in ADMIN_IDS:
+        rows.append([InlineKeyboardButton(text="👮 Дать права админа", callback_data=f"adm_give_admin:{tg_id}")])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад к клиентам", callback_data="adm_back_clients")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def kb_admin_clients_menu() -> InlineKeyboardMarkup:
@@ -1531,8 +1672,30 @@ def kb_admin_clients_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🆕 Новые (7 дней)", callback_data="adm_clients_new")],
         [InlineKeyboardButton(text="💰 Топ покупателей", callback_data="adm_clients_top")],
         [InlineKeyboardButton(text="🔍 Поиск по username / ID", callback_data="adm_clients_search")],
+        [InlineKeyboardButton(text="📤 Экспорт клиентов CSV", callback_data="adm_export_users")],
         [InlineKeyboardButton(text="📢 Сегментированная рассылка", callback_data="adm_segment_broadcast")],
     ])
+
+
+def kb_admin_order_detail(order_id: int, status: str) -> InlineKeyboardMarkup:
+    rows = []
+    if status in ("pending", "paid"):
+        rows.append([
+            InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"admin_confirm:{order_id}"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"admin_reject:{order_id}"),
+        ])
+    # Manual status override
+    rows.append([
+        InlineKeyboardButton(text="⏳ → В ожидание", callback_data=f"adm_setstatus:{order_id}:pending"),
+        InlineKeyboardButton(text="✅ → Подтверждён", callback_data=f"adm_setstatus:{order_id}:confirmed"),
+    ])
+    rows.append([
+        InlineKeyboardButton(text="💳 → Оплачен", callback_data=f"adm_setstatus:{order_id}:paid"),
+        InlineKeyboardButton(text="❌ → Отклонён", callback_data=f"adm_setstatus:{order_id}:rejected"),
+    ])
+    rows.append([InlineKeyboardButton(text="📝 Заметка к заказу", callback_data=f"adm_order_note:{order_id}")])
+    rows.append([InlineKeyboardButton(text="👤 Профиль клиента", callback_data=f"adm_order_client:{order_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 # ─────────────────────────────────────────────
@@ -1568,7 +1731,6 @@ def format_order_items_text(items: list) -> str:
 
 
 def format_order_items_plain(items: list) -> str:
-    """Для предзаполненного текста менеджеру — без HTML тегов."""
     lines = []
     for i in items:
         lines.append(
@@ -1585,10 +1747,6 @@ def apply_discount(total: float, promo: sqlite3.Row) -> tuple:
         discount = min(promo["value"], total)
         discount_str = f"{promo['value']:.0f} ₽"
     return discount, discount_str
-
-
-def is_admin(tg_id: int) -> bool:
-    return tg_id in ADMIN_IDS
 
 
 def build_cart_text(cart, lang: str) -> str:
@@ -1627,12 +1785,10 @@ def build_product_caption(product) -> str:
 
 
 def build_manager_prefill(order_id: int, order_data: dict, items: list, lang: str) -> str:
-    """Строит предзаполненное сообщение для менеджера (без HTML)."""
     items_plain = format_order_items_plain(items)
     promo_line = ""
     if order_data.get("promo_code"):
         promo_line = f"🎟 Промокод: {order_data['promo_code']} (-{order_data.get('discount_amount', 0):.0f} руб.)\n"
-
     text = t(
         "manager_prefill", lang,
         order_id=order_id,
@@ -1655,6 +1811,35 @@ async def send_product_card(message_or_call, product, cat_id: int, index: int, t
         await message_or_call.answer_photo(photo=first_photo, caption=caption, reply_markup=kb)
     else:
         await message_or_call.answer(caption, reply_markup=kb)
+
+
+def generate_users_csv(users) -> bytes:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID", "TG_ID", "Username", "Имя", "Фамилия", "Язык", "Забанен", "Причина бана", "Заметка", "Дата регистрации"])
+    for u in users:
+        writer.writerow([
+            u["id"], u["tg_id"], u["username"] or "",
+            u["first_name"] or "", u["last_name"] or "",
+            u["lang"], "Да" if u["is_banned"] else "Нет",
+            u["ban_reason"] if "ban_reason" in u.keys() else "",
+            u["note"] if "note" in u.keys() else "",
+            u["created_at"]
+        ])
+    return output.getvalue().encode("utf-8-sig")
+
+
+def generate_orders_csv(orders) -> bytes:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID", "TG_ID", "Имя", "Телефон", "Адрес", "Промокод", "Скидка", "Итого", "Статус", "Дата"])
+    for o in orders:
+        writer.writerow([
+            o["id"], o["tg_id"], o["name"], o["phone"], o["address"],
+            o["promo_code"] or "", o["discount_amount"], o["total"],
+            o["status"], o["created_at"]
+        ])
+    return output.getvalue().encode("utf-8-sig")
 
 
 # ─────────────────────────────────────────────
@@ -2162,10 +2347,13 @@ async def cb_order_confirm(call: CallbackQuery, state: FSMContext):
         total=data["total"]
     )
 
+    # count promo usage
+    if data.get("promo_code"):
+        db_increment_promo_uses(data["promo_code"])
+
     db_clear_cart(tg_id)
     await state.clear()
 
-    # Строим предзаполненное сообщение для менеджера
     order_data = {
         "name": data["name"],
         "phone": data["phone"],
@@ -2177,14 +2365,12 @@ async def cb_order_confirm(call: CallbackQuery, state: FSMContext):
     prefill_text = build_manager_prefill(order_id, order_data, items, lang)
     manager_username = db_get_order_manager()
 
-    # Уведомление пользователю
     await call.message.answer(
         t("order_placed", lang, order_id=order_id),
         reply_markup=kb_contact_manager(order_id, manager_username, prefill_text, lang)
     )
     await call.message.answer(t("main_menu", lang), reply_markup=kb_main_menu(lang))
 
-    # Уведомление администраторам
     user = db_get_user(tg_id)
     username_str = f"@{user['username']}" if user and user["username"] else "—"
     items_text = format_order_items_text(items)
@@ -2203,7 +2389,7 @@ async def cb_order_confirm(call: CallbackQuery, state: FSMContext):
         f"{promo_info}\n\n"
         f"💰 <b>Итого: {order_data['total']:.2f} ₽</b>"
     )
-    for admin_id in ADMIN_IDS:
+    for admin_id in db_get_all_admin_ids():
         try:
             await bot.send_message(admin_id, admin_text, reply_markup=kb_admin_order(order_id))
         except Exception:
@@ -2237,6 +2423,7 @@ async def cb_admin_confirm(call: CallbackQuery):
         return
 
     db_set_order_status(order_id, "confirmed")
+    db_log(call.from_user.id, "order_confirm", f"Заказ #{order_id}")
 
     items = json.loads(order["items"])
     for item in items:
@@ -2280,6 +2467,7 @@ async def cb_admin_reject(call: CallbackQuery):
         await call.answer("Заказ уже отклонён", show_alert=True)
         return
     db_set_order_status(order_id, "rejected")
+    db_log(call.from_user.id, "order_reject", f"Заказ #{order_id}")
     try:
         await call.message.edit_reply_markup(reply_markup=None)
     except Exception:
@@ -2325,11 +2513,13 @@ async def admin_password_check(message: Message, state: FSMContext):
         await state.clear()
         is_maint = db_is_maintenance()
         maint_status = "🔴 Закрыт (тех. перерыв)" if is_maint else "🟢 Открыт"
+        superadmin_badge = " 👑" if is_superadmin(message.from_user.id) else ""
         await message.answer(
-            f"✅ <b>Добро пожаловать в панель администратора {SHOP_NAME}!</b>\n\n"
+            f"✅ <b>Добро пожаловать{superadmin_badge} в панель администратора {SHOP_NAME}!</b>\n\n"
             f"Статус магазина: {maint_status}\n\nВыберите раздел:",
             reply_markup=kb_admin_main()
         )
+        db_log(message.from_user.id, "login", "Вход в панель")
     else:
         await state.clear()
         await message.answer("❌ <b>Неверный пароль.</b> Доступ запрещён.")
@@ -2340,8 +2530,151 @@ async def admin_exit(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     await state.clear()
+    db_log(message.from_user.id, "logout", "Выход из панели")
     lang = db_get_lang(message.from_user.id)
     await message.answer(t("main_menu", lang), reply_markup=kb_main_menu(lang))
+
+
+# ─────────────────────────────────────────────
+# ADMIN: ADMINISTRATORS
+# ─────────────────────────────────────────────
+
+@router.message(StateFilter(None), F.text == "👮 Администраторы")
+async def admin_admins(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    await state.clear()
+    extra = db_get_extra_admins()
+
+    lines = [f"👮 <b>Администраторы {SHOP_NAME}</b>\n"]
+    lines.append("🔑 <b>Суперадминистраторы (из кода):</b>")
+    for aid in ADMIN_IDS:
+        user = db_get_user(aid)
+        if user:
+            name = f"{user['first_name']} {user['last_name'] or ''}".strip() or "—"
+            uname = f"@{user['username']}" if user["username"] else "—"
+            lines.append(f"  👑 {name} | {uname} | <code>{aid}</code>")
+        else:
+            lines.append(f"  👑 ID: <code>{aid}</code> (нет в БД)")
+
+    if extra:
+        lines.append("\n🔓 <b>Дополнительные администраторы:</b>")
+        for a in extra:
+            user = db_get_user(a["tg_id"])
+            name = "—"
+            if user:
+                name = f"{user['first_name']} {user['last_name'] or ''}".strip() or "—"
+            uname = f"@{a['username']}" if a["username"] else "—"
+            lines.append(f"  👮 {name} | {uname} | <code>{a['tg_id']}</code>\n     Добавлен: {a['added_at'][:10]}")
+
+    kb_rows = []
+    if is_superadmin(message.from_user.id):
+        kb_rows.append([InlineKeyboardButton(text="➕ Добавить администратора", callback_data="adm_add_admin")])
+        for a in extra:
+            uname = f"@{a['username']}" if a["username"] else str(a["tg_id"])
+            kb_rows.append([InlineKeyboardButton(
+                text=f"🗑 Удалить {uname}",
+                callback_data=f"adm_remove_admin:{a['tg_id']}"
+            )])
+
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows) if kb_rows else None
+    )
+
+
+@router.callback_query(F.data == "adm_add_admin")
+async def cb_adm_add_admin(call: CallbackQuery, state: FSMContext):
+    if not is_superadmin(call.from_user.id):
+        await call.answer("Только суперадминистраторы могут это делать", show_alert=True)
+        return
+    await state.set_state(AdminExtraAdmin.add_id)
+    await call.message.answer(
+        "👮 Введите <b>Telegram ID</b> нового администратора:\n\n<i>Пользователь должен сначала написать боту.</i>",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await call.answer()
+
+
+@router.message(AdminExtraAdmin.add_id)
+async def adm_add_admin_input(message: Message, state: FSMContext):
+    if not is_superadmin(message.from_user.id):
+        await state.clear()
+        return
+    try:
+        new_id = int(message.text.strip())
+    except ValueError:
+        await message.answer("⚠️ Введите числовой Telegram ID:")
+        return
+    if new_id in ADMIN_IDS:
+        await message.answer("⚠️ Этот пользователь уже является суперадминистратором.")
+        await state.clear()
+        return
+    user = db_get_user(new_id)
+    username = user["username"] if user else ""
+    db_add_extra_admin(new_id, username, message.from_user.id)
+    db_log(message.from_user.id, "add_admin", f"Добавлен администратор {new_id}")
+    name = f"{user['first_name']} {user['last_name'] or ''}".strip() if user else str(new_id)
+    await state.clear()
+    await message.answer(f"✅ Администратор <b>{name}</b> (<code>{new_id}</code>) добавлен.", reply_markup=kb_admin_main())
+    try:
+        await bot.send_message(new_id, f"👮 Вам выданы права администратора магазина <b>{SHOP_NAME}</b>.\n\nИспользуйте /admin для входа в панель.")
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("adm_remove_admin:"))
+async def cb_adm_remove_admin(call: CallbackQuery):
+    if not is_superadmin(call.from_user.id):
+        await call.answer("Только суперадминистраторы", show_alert=True)
+        return
+    tg_id = int(call.data.split(":")[1])
+    db_remove_extra_admin(tg_id)
+    db_log(call.from_user.id, "remove_admin", f"Удалён администратор {tg_id}")
+    await call.answer("Администратор удалён")
+    await call.message.answer("✅ Администратор удалён.", reply_markup=kb_admin_main())
+
+
+@router.callback_query(F.data.startswith("adm_give_admin:"))
+async def cb_adm_give_admin(call: CallbackQuery):
+    if not is_superadmin(call.from_user.id):
+        await call.answer("Только суперадминистраторы", show_alert=True)
+        return
+    tg_id = int(call.data.split(":")[1])
+    user = db_get_user(tg_id)
+    username = user["username"] if user else ""
+    db_add_extra_admin(tg_id, username, call.from_user.id)
+    db_log(call.from_user.id, "add_admin", f"Добавлен администратор {tg_id}")
+    await call.answer("✅ Права администратора выданы")
+    try:
+        await bot.send_message(tg_id, f"👮 Вам выданы права администратора магазина <b>{SHOP_NAME}</b>.\n\nИспользуйте /admin для входа в панель.")
+    except Exception:
+        pass
+
+
+# ─────────────────────────────────────────────
+# ADMIN: LOG
+# ─────────────────────────────────────────────
+
+@router.message(StateFilter(None), F.text == "📋 Лог действий")
+async def admin_log_view(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    await state.clear()
+    logs = db_get_log(30)
+    if not logs:
+        await message.answer("📋 Лог пуст.")
+        return
+    lines = ["📋 <b>Последние действия администраторов:</b>\n"]
+    for log in logs:
+        user = db_get_user(log["admin_id"])
+        admin_name = user["username"] or str(log["admin_id"]) if user else str(log["admin_id"])
+        lines.append(
+            f"🕐 {log['created_at'][11:16]} | @{admin_name}\n"
+            f"   {log['action']}"
+            + (f": {log['details']}" if log['details'] else "")
+        )
+    await message.answer("\n".join(lines))
 
 
 # ─────────────────────────────────────────────
@@ -2382,11 +2715,9 @@ async def adm_maintenance_time(message: Message, state: FSMContext):
         time_str = ""
     db_set_setting("maintenance_time", time_str)
     db_set_setting("maintenance", "1")
+    db_log(message.from_user.id, "maintenance_on", time_str)
     await state.clear()
-    await message.answer(
-        f"🔴 <b>Магазин закрыт на тех. перерыв.</b>",
-        reply_markup=kb_admin_main()
-    )
+    await message.answer("🔴 <b>Магазин закрыт на тех. перерыв.</b>", reply_markup=kb_admin_main())
 
 
 @router.callback_query(F.data == "maint_set_time")
@@ -2404,6 +2735,7 @@ async def cb_maint_off(call: CallbackQuery):
         return
     db_set_setting("maintenance", "0")
     db_set_setting("maintenance_time", "")
+    db_log(call.from_user.id, "maintenance_off", "")
     await call.message.answer("🟢 <b>Магазин открыт!</b>", reply_markup=kb_admin_main())
     await call.answer("Магазин открыт!")
 
@@ -2527,7 +2859,8 @@ async def adm_cat_sort(message: Message, state: FSMContext):
     except ValueError:
         sort_order = 0
     data = await state.get_data()
-    cat_id = db_add_category(data["name"], data["emoji"], sort_order)
+    db_add_category(data["name"], data["emoji"], sort_order)
+    db_log(message.from_user.id, "add_category", data["name"])
     await state.clear()
     await message.answer(f"✅ Категория <b>{data['emoji']} {data['name']}</b> создана!", reply_markup=kb_admin_main())
 
@@ -2693,6 +3026,7 @@ async def cb_adm_delete_product(call: CallbackQuery):
         return
     product_id = int(call.data.split(":")[1])
     db_delete_product(product_id)
+    db_log(call.from_user.id, "delete_product", f"ID {product_id}")
     await call.message.edit_text("🗑 Товар удалён.")
     await call.answer()
 
@@ -2890,6 +3224,7 @@ async def adm_quick_stock(message: Message, state: FSMContext):
     )
     for size, color, qty in stock_data:
         db_set_stock(product_id, size, color, qty)
+    db_log(message.from_user.id, "add_product", parsed["name"])
     await state.clear()
     await message.answer(
         f"🎉 <b>Товар добавлен!</b>\n\n📝 {parsed['name']}\n💰 {parsed['price']:.0f} ₽\n"
@@ -3066,12 +3401,48 @@ async def admin_orders(message: Message, state: FSMContext):
             counts[o["status"]] += 1
     summary = (
         f"📦 <b>Все заказы</b> (всего: {len(orders)})\n\n"
-        f"⏳ Ждут обработки: {counts['pending']}\n"
-        f"💳 Ждут подтверждения: {counts['paid']}\n"
+        f"⏳ В ожидании: {counts['pending']}\n"
+        f"💳 Оплачены: {counts['paid']}\n"
         f"✅ Подтверждены: {counts['confirmed']}\n"
         f"❌ Отклонены: {counts['rejected']}"
     )
-    await message.answer(summary, reply_markup=kb_admin_orders(orders))
+    kb_rows = [
+        [InlineKeyboardButton(text="🔍 Поиск заказа", callback_data="adm_order_search")],
+        [InlineKeyboardButton(text="📤 Экспорт заказов CSV", callback_data="adm_export_orders")],
+    ]
+    await message.answer(summary, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows))
+    await message.answer("Последние 20 заказов:", reply_markup=kb_admin_orders(orders))
+
+
+@router.callback_query(F.data == "adm_order_search")
+async def cb_adm_order_search(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        return
+    await state.set_state(AdminUserAction.waiting_order_search)
+    await call.message.answer("🔍 Введите <b>номер заказа</b>, имя клиента или телефон:", reply_markup=ReplyKeyboardRemove())
+    await call.answer()
+
+
+@router.message(AdminUserAction.waiting_order_search)
+async def adm_order_search_input(message: Message, state: FSMContext):
+    await state.clear()
+    orders = db_search_orders(message.text.strip())
+    if not orders:
+        await message.answer(f"❌ Ничего не найдено по запросу «{message.text.strip()}»", reply_markup=kb_admin_main())
+        return
+    await message.answer(f"🔍 Найдено: {len(orders)}", reply_markup=kb_admin_orders(orders))
+
+
+@router.callback_query(F.data == "adm_export_orders")
+async def cb_adm_export_orders(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    orders = db_get_all_orders()
+    csv_bytes = generate_orders_csv(orders)
+    file = BufferedInputFile(csv_bytes, filename=f"orders_{datetime.now().strftime('%Y%m%d_%H%M')}.csv")
+    await call.message.answer_document(file, caption=f"📤 Экспорт заказов ({len(orders)} шт.)")
+    db_log(call.from_user.id, "export_orders", f"{len(orders)} записей")
+    await call.answer()
 
 
 @router.callback_query(F.data.startswith("adm_order:"))
@@ -3089,23 +3460,99 @@ async def cb_adm_order(call: CallbackQuery):
     if order["promo_code"]:
         promo_info = f"\n🎟 Промокод: {order['promo_code']} (−{order['discount_amount']:.2f} ₽)"
     status_map = {
-        "pending": "⏳ Ожидает обработки",
-        "paid": "💳 Ждёт подтверждения",
+        "pending": "⏳ Ожидает",
+        "paid": "💳 Оплачен",
         "confirmed": "✅ Подтверждён",
         "rejected": "❌ Отклонён",
     }
     user = db_get_user(order["tg_id"])
     username_str = f"@{user['username']}" if user and user["username"] else "—"
+    admin_note = order["admin_note"] if "admin_note" in order.keys() and order["admin_note"] else ""
+    note_line = f"\n📝 Заметка: {admin_note}" if admin_note else ""
     text = (
         f"<b>Заказ #{order_id}</b> — {status_map.get(order['status'], order['status'])}\n\n"
         f"👤 {order['name']}\n🧑 {username_str}\n🆔 <code>{order['tg_id']}</code>\n"
         f"📱 {order['phone']}\n📍 {order['address']}\n\n"
         f"🛍 <b>Товары:</b>\n{items_text}{promo_info}\n\n"
         f"💰 <b>Итого: {order['total']:.2f} ₽</b>\n📅 {order['created_at'][:16]}"
+        f"{note_line}"
     )
-    kb = kb_admin_order(order_id) if order["status"] in ("pending", "paid") else None
-    await call.message.answer(text, reply_markup=kb)
+    await call.message.answer(text, reply_markup=kb_admin_order_detail(order_id, order["status"]))
     await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm_setstatus:"))
+async def cb_adm_setstatus(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    parts = call.data.split(":")
+    order_id = int(parts[1])
+    new_status = parts[2]
+    order = db_get_order(order_id)
+    if not order:
+        await call.answer("Заказ не найден")
+        return
+    db_set_order_status(order_id, new_status)
+    db_log(call.from_user.id, "set_order_status", f"Заказ #{order_id} → {new_status}")
+
+    # decrement stock on confirm
+    if new_status == "confirmed" and order["status"] != "confirmed":
+        items = json.loads(order["items"])
+        for item in items:
+            db_decrement_stock(item["product_id"], item["size"], item["color"], item["quantity"])
+
+    status_names = {"pending": "⏳ Ожидание", "paid": "💳 Оплачен", "confirmed": "✅ Подтверждён", "rejected": "❌ Отклонён"}
+    await call.answer(f"Статус изменён: {status_names.get(new_status, new_status)}", show_alert=True)
+
+    # notify user
+    lang = db_get_lang(order["tg_id"])
+    try:
+        if new_status == "confirmed":
+            await bot.send_message(order["tg_id"], t("order_approved", lang, order_id=order_id, shop=SHOP_NAME))
+        elif new_status == "rejected":
+            await bot.send_message(order["tg_id"], t("order_rejected", lang, order_id=order_id))
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("adm_order_note:"))
+async def cb_adm_order_note(call: CallbackQuery, state: FSMContext):
+    if not is_admin(call.from_user.id):
+        return
+    order_id = int(call.data.split(":")[1])
+    await state.set_state(AdminUserAction.waiting_order_note)
+    await state.update_data(target_order_id=order_id)
+    await call.message.answer("📝 Введите заметку к заказу (или «-» чтобы очистить):", reply_markup=ReplyKeyboardRemove())
+    await call.answer()
+
+
+@router.message(AdminUserAction.waiting_order_note)
+async def adm_order_note_input(message: Message, state: FSMContext):
+    data = await state.get_data()
+    order_id = data["target_order_id"]
+    note = message.text.strip()
+    if note == "-":
+        note = ""
+    db_set_order_note(order_id, note)
+    await state.clear()
+    await message.answer("✅ Заметка сохранена.", reply_markup=kb_admin_main())
+
+
+@router.callback_query(F.data.startswith("adm_order_client:"))
+async def cb_adm_order_client(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    order_id = int(call.data.split(":")[1])
+    order = db_get_order(order_id)
+    if not order:
+        await call.answer()
+        return
+    user = db_get_user(order["tg_id"])
+    if not user:
+        await call.answer("Пользователь не найден")
+        return
+    await call.answer()
+    await show_admin_user_card(call, user)
 
 
 # ─────── ADMIN: PROMOS ───────
@@ -3141,10 +3588,12 @@ async def cb_adm_promo(call: CallbackQuery):
         return
     disc = f"{promo['value']:.0f}%" if promo["type"] == "percent" else f"{promo['value']:.0f} ₽"
     status = "✅ Активен" if promo["is_active"] else "🚫 Отключён"
+    uses = promo["uses_count"] if "uses_count" in promo.keys() else 0
     text = (
         f"🎟 <b>{promo['code']}</b>\n\n"
         f"Тип: {'Процент' if promo['type'] == 'percent' else 'Фиксированная сумма'}\n"
-        f"Скидка: −{disc}\nСтатус: {status}\nСоздан: {promo['created_at'][:10]}"
+        f"Скидка: −{disc}\nСтатус: {status}\n"
+        f"Использований: {uses}\nСоздан: {promo['created_at'][:10]}"
     )
     await call.message.edit_text(text, reply_markup=kb_admin_promo_actions(promo_id, promo["is_active"]))
     await call.answer()
@@ -3220,13 +3669,14 @@ async def adm_promo_value(message: Message, state: FSMContext):
         return
     data = await state.get_data()
     db_add_promo(data["code"], data["ptype"], value)
+    db_log(message.from_user.id, "add_promo", data["code"])
     await state.clear()
     disc = f"{value:.0f}%" if data["ptype"] == "percent" else f"{value:.0f} ₽"
     await message.answer(f"✅ Промокод <b>{data['code']}</b> (−{disc}) создан!", reply_markup=kb_admin_main())
 
 
 # ─────────────────────────────────────────────
-# ADMIN: КЛИЕНТЫ (расширенные)
+# ADMIN: КЛИЕНТЫ
 # ─────────────────────────────────────────────
 
 @router.message(StateFilter(None), F.text == "👥 Клиенты")
@@ -3236,7 +3686,6 @@ async def admin_clients(message: Message, state: FSMContext):
     await state.clear()
     users = db_get_all_users()
     banned = sum(1 for u in users if u["is_banned"])
-    new_7d = sum(1 for u in users if u["created_at"] >= datetime.now().strftime("%Y-%m-%d %H:%M:%S")[:10])
     await message.answer(
         f"👥 <b>Управление клиентами</b>\n\n"
         f"Всего: <b>{len(users)}</b> | Забаненных: <b>{banned}</b>",
@@ -3254,6 +3703,18 @@ async def cb_adm_back_clients(call: CallbackQuery):
         f"👥 <b>Управление клиентами</b>\n\nВсего: <b>{len(users)}</b> | Забаненных: <b>{banned}</b>",
         reply_markup=kb_admin_clients_menu()
     )
+    await call.answer()
+
+
+@router.callback_query(F.data == "adm_export_users")
+async def cb_adm_export_users(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    users = db_get_all_users()
+    csv_bytes = generate_users_csv(users)
+    file = BufferedInputFile(csv_bytes, filename=f"users_{datetime.now().strftime('%Y%m%d_%H%M')}.csv")
+    await call.message.answer_document(file, caption=f"📤 Экспорт клиентов ({len(users)} чел.)")
+    db_log(call.from_user.id, "export_users", f"{len(users)} записей")
     await call.answer()
 
 
@@ -3316,7 +3777,8 @@ async def cb_adm_clients_banned(call: CallbackQuery):
     for u in users:
         uname = f"@{u['username']}" if u["username"] else "—"
         name = f"{u['first_name']} {u['last_name'] or ''}".strip() or "—"
-        lines.append(f"🚫 {name} | {uname} | <code>{u['tg_id']}</code>")
+        reason = u["ban_reason"] if "ban_reason" in u.keys() and u["ban_reason"] else "—"
+        lines.append(f"🚫 {name} | {uname} | <code>{u['tg_id']}</code>\n   Причина: {reason}")
         kb_rows.append([InlineKeyboardButton(
             text=f"✅ Разбанить {name[:15]}",
             callback_data=f"adm_unban:{u['tg_id']}"
@@ -3476,7 +3938,10 @@ async def show_admin_user_card(target, user):
     uname = f"@{user['username']}" if user["username"] else "—"
     name = f"{user['first_name']} {user['last_name'] or ''}".strip() or "—"
     ban_status = "🚫 Забанен" if user["is_banned"] else "✅ Активен"
-    note = user["note"] or "—" if "note" in user.keys() else "—"
+    ban_reason = ""
+    if user["is_banned"] and "ban_reason" in user.keys() and user["ban_reason"]:
+        ban_reason = f"\n   Причина: {user['ban_reason']}"
+    note = user["note"] if "note" in user.keys() else ""
     conn = get_db()
     order_count = conn.execute("SELECT COUNT(*) FROM orders WHERE tg_id=?", (user["tg_id"],)).fetchone()[0]
     total_spent = conn.execute(
@@ -3485,23 +3950,35 @@ async def show_admin_user_card(target, user):
     last_order = conn.execute(
         "SELECT created_at FROM orders WHERE tg_id=? ORDER BY id DESC LIMIT 1", (user["tg_id"],)
     ).fetchone()
+    cart_count = conn.execute("SELECT COUNT(*) FROM cart WHERE tg_id=?", (user["tg_id"],)).fetchone()[0]
     conn.close()
     last_order_str = last_order["created_at"][:10] if last_order else "—"
+    is_extra_admin = user["tg_id"] in [a["tg_id"] for a in db_get_extra_admins()]
+    is_super = user["tg_id"] in ADMIN_IDS
+    admin_badge = " 👑" if is_super else (" 👮" if is_extra_admin else "")
     text = (
-        f"👤 <b>Профиль</b>\n\n"
+        f"👤 <b>Профиль{admin_badge}</b>\n\n"
         f"Имя: {name}\nUsername: {uname}\n"
         f"Telegram ID: <code>{user['tg_id']}</code>\n"
-        f"Язык: {user['lang']}\nСтатус: {ban_status}\n"
-        f"Заметка: {note}\n\n"
-        f"📦 Заказов: <b>{order_count}</b>\n"
+        f"Язык: {user['lang']}\nСтатус: {ban_status}{ban_reason}\n"
+        + (f"📝 Заметка: {note}\n" if note else "")
+        + f"\n📦 Заказов: <b>{order_count}</b>\n"
         f"💰 Потрачено: <b>{total_spent:.2f} ₽</b>\n"
+        f"🛒 В корзине: <b>{cart_count}</b> поз.\n"
         f"📅 Последний заказ: {last_order_str}\n"
         f"🗓 Регистрация: {user['created_at'][:10]}"
     )
+    is_superadmin_call = False
+    if hasattr(target, "from_user"):
+        is_superadmin_call = is_superadmin(target.from_user.id)
+    elif hasattr(target, "message") and hasattr(target.message, "from_user"):
+        is_superadmin_call = is_superadmin(target.message.chat.id)
+
+    kb = kb_admin_user_actions(user["tg_id"], user["is_banned"], is_superadmin_call)
     if hasattr(target, "answer"):
-        await target.answer(text, reply_markup=kb_admin_user_actions(user["tg_id"], user["is_banned"]))
+        await target.answer(text, reply_markup=kb)
     else:
-        await target.message.answer(text, reply_markup=kb_admin_user_actions(user["tg_id"], user["is_banned"]))
+        await target.message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("adm_user:"))
@@ -3517,13 +3994,30 @@ async def cb_adm_user(call: CallbackQuery):
     await show_admin_user_card(call, user)
 
 
-@router.callback_query(F.data.startswith("adm_ban:"))
-async def cb_adm_ban(call: CallbackQuery):
+@router.callback_query(F.data.startswith("adm_ban_start:"))
+async def cb_adm_ban_start(call: CallbackQuery, state: FSMContext):
     if not is_admin(call.from_user.id):
         return
     tg_id = int(call.data.split(":")[1])
-    db_ban_user(tg_id)
-    await call.answer("Пользователь забанен")
+    await state.set_state(AdminUserAction.waiting_ban_reason)
+    await state.update_data(target_tg_id=tg_id)
+    await call.message.answer(
+        "🚫 Введите <b>причину бана</b> (или «-» без причины):",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await call.answer()
+
+
+@router.message(AdminUserAction.waiting_ban_reason)
+async def adm_ban_reason_input(message: Message, state: FSMContext):
+    data = await state.get_data()
+    tg_id = data["target_tg_id"]
+    reason = message.text.strip()
+    if reason == "-":
+        reason = ""
+    db_ban_user(tg_id, reason)
+    db_log(message.from_user.id, "ban_user", f"TG:{tg_id} причина: {reason or '—'}")
+    await state.clear()
     user = db_get_user(tg_id)
     if user:
         try:
@@ -3531,7 +4025,7 @@ async def cb_adm_ban(call: CallbackQuery):
             await bot.send_message(tg_id, t("banned_message", lang))
         except Exception:
             pass
-    await call.message.edit_reply_markup(reply_markup=kb_admin_user_actions(tg_id, 1))
+    await message.answer(f"🚫 Пользователь <code>{tg_id}</code> забанен.", reply_markup=kb_admin_main())
 
 
 @router.callback_query(F.data.startswith("adm_unban:"))
@@ -3540,6 +4034,7 @@ async def cb_adm_unban(call: CallbackQuery):
         return
     tg_id = int(call.data.split(":")[1])
     db_unban_user(tg_id)
+    db_log(call.from_user.id, "unban_user", f"TG:{tg_id}")
     await call.answer("Пользователь разбанен")
     try:
         await call.message.edit_reply_markup(reply_markup=kb_admin_user_actions(tg_id, 0))
@@ -3588,9 +4083,20 @@ async def adm_user_message_send(message: Message, state: FSMContext):
     await state.clear()
     try:
         await bot.send_message(tg_id, f"📩 <b>Сообщение от администратора:</b>\n\n{message.text}")
+        db_log(message.from_user.id, "msg_user", f"TG:{tg_id}")
         await message.answer("✅ Сообщение отправлено.", reply_markup=kb_admin_main())
     except Exception:
         await message.answer("❌ Не удалось отправить (пользователь мог заблокировать бот).", reply_markup=kb_admin_main())
+
+
+@router.callback_query(F.data.startswith("adm_clear_cart:"))
+async def cb_adm_clear_cart(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return
+    tg_id = int(call.data.split(":")[1])
+    db_clear_cart(tg_id)
+    db_log(call.from_user.id, "clear_cart", f"TG:{tg_id}")
+    await call.answer("Корзина очищена", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("adm_user_cart:"))
@@ -3638,7 +4144,7 @@ async def cb_adm_user_orders(call: CallbackQuery):
 
 
 # ─────────────────────────────────────────────
-# ADMIN: BROADCAST (с поддержкой сегментов)
+# ADMIN: BROADCAST
 # ─────────────────────────────────────────────
 
 @router.message(StateFilter(None), F.text == "📢 Рассылка")
@@ -3711,6 +4217,7 @@ async def admin_broadcast_send(call: CallbackQuery, state: FSMContext):
         except Exception:
             failed += 1
 
+    db_log(call.from_user.id, "broadcast", f"Отправлено: {sent}, ошибок: {failed}")
     await call.message.answer(
         f"📢 <b>Готово!</b>\n✅ Доставлено: {sent}\n❌ Ошибок: {failed}",
         reply_markup=kb_admin_main()
@@ -3759,6 +4266,7 @@ async def admin_stats(message: Message, state: FSMContext):
     avg_order = conn.execute(
         "SELECT COALESCE(AVG(total),0) FROM orders WHERE status IN ('paid','confirmed')"
     ).fetchone()[0]
+    admins_count = len(ADMIN_IDS) + len(db_get_extra_admins())
     conn.close()
 
     top_buyers_text = ""
@@ -3778,11 +4286,12 @@ async def admin_stats(message: Message, state: FSMContext):
     manager = db_get_order_manager()
     await message.answer(
         f"📊 <b>Статистика {SHOP_NAME}</b>\n\n"
-        f"🏪 Статус: {maint_status} | 👥 Польз.: <b>{users_count}</b>\n"
+        f"🏪 Статус: {maint_status} | 👮 Адм.: <b>{admins_count}</b>\n"
+        f"👥 Пользователей: <b>{users_count}</b>\n"
         f"🆕 Новых (7д): <b>{new_users_week}</b> | 🚫 Забанено: <b>{banned_count}</b>\n"
         f"🛍 Активных товаров: <b>{products_count}</b>\n\n"
         f"📦 Заказов всего: <b>{orders_count}</b>\n"
-        f"💳 Ждут подтверждения: <b>{pending_count}</b>\n"
+        f"⏳ В ожидании: <b>{pending_count}</b>\n"
         f"📅 Заказов сегодня: <b>{today_orders}</b>\n\n"
         f"💰 Выручка всего: <b>{revenue:.2f} ₽</b>\n"
         f"📆 Выручка этого месяца: <b>{month_revenue:.2f} ₽</b>\n"
@@ -3794,7 +4303,7 @@ async def admin_stats(message: Message, state: FSMContext):
 
 
 # ─────────────────────────────────────────────
-# ADMIN: SETTINGS (расширенные)
+# ADMIN: SETTINGS
 # ─────────────────────────────────────────────
 
 @router.message(StateFilter(None), F.text == "⚙️ Настройки")
@@ -3832,11 +4341,9 @@ async def adm_set_manager(message: Message, state: FSMContext):
         await message.answer("⚠️ Введите корректный username:")
         return
     db_set_setting("order_manager", username)
+    db_log(message.from_user.id, "set_manager", username)
     await state.clear()
-    await message.answer(
-        f"✅ Менеджер заказов обновлён: @{username}",
-        reply_markup=kb_admin_main()
-    )
+    await message.answer(f"✅ Менеджер заказов обновлён: @{username}", reply_markup=kb_admin_main())
 
 
 # ─────── NOOP ───────
