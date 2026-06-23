@@ -25,7 +25,7 @@ from aiogram.types import (
 # CONFIG
 # ─────────────────────────────────────────────
 
-BOT_TOKEN = "8739516166:AAGVEq4oeNb42aY-uDY1vCMOj9mNhsvucmI"
+BOT_TOKEN = "8739516166:AAEBiGcvpGFkTwAH-NRW3Fn0QWVGlX_v6Ns"
 
 ADMIN_IDS = [7752932648, 8379783147]
 
